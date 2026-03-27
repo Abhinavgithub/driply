@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum ItemKind {
+  TOP
+  BOTTOM
+  SHOE
+}
+
+enum ColorFamily {
+  BLACK
+  WHITE
+  BLUE
+  BROWN
+  GREEN
+  RED
+  PINK
+  GREY
+  BEIGE
+  YELLOW
+  MULTI
+  UNKNOWN
+}
+
+enum Pattern {
+  SOLID
+  STRIPED
+  CHECKERED
+  GRAPHIC
+  PRINTED
+  TEXTURED
+  UNKNOWN
+}
+
+enum StyleProfile {
+  CASUAL
+  SMART_CASUAL
+  ATHLEISURE
+  FORMAL
+  UNKNOWN
+}
+
+enum Formality {
+  RELAXED
+  ELEVATED
+  DRESSY
+  UNKNOWN
+}
+
+enum WarmthLevel {
+  LIGHT
+  MID
+  WARM
+  UNKNOWN
+}
+
+model Item {
+  id String @id @default(cuid())
+
+  createdAt DateTime @default(now())
+
+  kind ItemKind
+  subtype String
+  colorFamily ColorFamily @default(UNKNOWN)
+  pattern Pattern @default(UNKNOWN)
+  styleProfile StyleProfile @default(UNKNOWN)
+  formality Formality @default(UNKNOWN)
+  warmthLevel WarmthLevel @default(UNKNOWN)
+
+  /// Public URL served from Next.js `public/` (example: `/uploads/items/<id>.jpg`)
+  photoUrl String
+}
+
+model OutfitHistory {
+  id String @id @default(cuid())
+
+  /// Date-only (no time component), used for "daily recommendation".
+  date DateTime
+  createdAt DateTime @default(now())
+
+  topItemId String
+  bottomItemId String
+  shoeItemId String
+
+  @@index([date])
+}
