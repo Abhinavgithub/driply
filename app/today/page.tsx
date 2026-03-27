@@ -50,7 +50,20 @@ type Coordinates = {
   lon: number;
 };
 
+type SavedLocation = {
+  name: string;
+  admin1?: string;
+  country?: string;
+  latitude: number;
+  longitude: number;
+};
+
+type LocationResult = SavedLocation;
+
+type LocationSource = "device" | "saved" | "manual" | null;
+
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
+const SAVED_LOCATION_KEY = "driply-saved-location";
 
 function formatEnumLabel(value: string) {
   return value
@@ -98,6 +111,39 @@ function isRetryableGeolocationError(error: GeolocationPositionError) {
     error.code === error.TIMEOUT ||
     error.message.toLowerCase().includes("locationunknown")
   );
+}
+
+function getSavedLocation(): SavedLocation | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(SAVED_LOCATION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedLocation;
+    if (
+      typeof parsed.name === "string" &&
+      typeof parsed.latitude === "number" &&
+      typeof parsed.longitude === "number"
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function setSavedLocation(next: SavedLocation | null) {
+  if (typeof window === "undefined") return;
+  if (!next) {
+    window.localStorage.removeItem(SAVED_LOCATION_KEY);
+    return;
+  }
+  window.localStorage.setItem(SAVED_LOCATION_KEY, JSON.stringify(next));
+}
+
+function formatLocationLabel(location: SavedLocation) {
+  return [location.name, location.admin1, location.country].filter(Boolean).join(", ");
 }
 
 async function getGeolocationAttempt(): Promise<Coordinates> {
@@ -154,6 +200,13 @@ async function fetchRecommendationPage(args: {
   return { res, json };
 }
 
+async function searchManualLocations(query: string) {
+  const res = await fetch(`/api/location-search?q=${encodeURIComponent(query)}`);
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Location search failed.");
+  return (json.results ?? []) as LocationResult[];
+}
+
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between border-t border-border py-3 text-sm">
@@ -166,6 +219,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const [options, setOptions] = useState<RecommendationOption[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [coords, setCoords] = useState<Coordinates | null>(null);
@@ -173,23 +227,23 @@ export default function TodayPage() {
   const [needs, setNeeds] = useState<{ top: boolean; bottom: boolean; shoe: boolean } | null>(null);
   const [cursor, setCursor] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  const [locationSource, setLocationSource] = useState<LocationSource>(null);
+  const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null);
+  const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<LocationResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const pageLimit = 6;
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const current = options[selectedIndex] ?? null;
 
-  const loadInitialRecommendation = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setMarked(false);
-    setNeeds(null);
-    setOptions([]);
-    setSelectedIndex(0);
-    setCursor(0);
-
-    try {
-      const nextCoords = await getGeolocationWithRetry();
+  const loadRecommendationsForCoordinates = useCallback(
+    async (nextCoords: Coordinates, source: LocationSource, locationLabel?: string) => {
       setCoords(nextCoords);
+      setLocationSource(source);
+      setActiveLocationLabel(locationLabel ?? null);
 
       const { res, json } = await fetchRecommendationPage({
         coords: nextCoords,
@@ -206,12 +260,47 @@ export default function TodayPage() {
       const data = json as RecommendationOptionsResponse;
       setOptions(data.options ?? []);
       setCursor(data.offset + (data.options?.length ?? 0));
+    },
+    [localDateKey],
+  );
+
+  const loadInitialRecommendation = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setLocationError(null);
+    setMarked(false);
+    setNeeds(null);
+    setOptions([]);
+    setSelectedIndex(0);
+    setCursor(0);
+
+    const storedLocation = getSavedLocation();
+    setSavedLocationState(storedLocation);
+
+    try {
+      const nextCoords = await getGeolocationWithRetry();
+      await loadRecommendationsForCoordinates(nextCoords, "device");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setLocationError(message);
+
+      if (storedLocation) {
+        try {
+          await loadRecommendationsForCoordinates(
+            { lat: storedLocation.latitude, lon: storedLocation.longitude },
+            "saved",
+            formatLocationLabel(storedLocation),
+          );
+          setLoading(false);
+          return;
+        } catch (fallbackError) {
+          setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [localDateKey]);
+  }, [loadRecommendationsForCoordinates]);
 
   useEffect(() => {
     void loadInitialRecommendation();
@@ -275,6 +364,60 @@ export default function TodayPage() {
     }
   }
 
+  async function onSearchLocation() {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchError("Enter a city.");
+      setSearchResults([]);
+      return;
+    }
+
+    setSearchLoading(true);
+    setSearchError(null);
+    try {
+      const results = await searchManualLocations(trimmed);
+      setSearchResults(results);
+      if (!results.length) setSearchError("No results.");
+    } catch (e) {
+      setSearchError(e instanceof Error ? e.message : String(e));
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }
+
+  async function onUseLocation(result: LocationResult) {
+    setLoading(true);
+    setError(null);
+    setSearchError(null);
+    try {
+      await loadRecommendationsForCoordinates(
+        { lat: result.latitude, lon: result.longitude },
+        savedLocation &&
+          savedLocation.latitude === result.latitude &&
+          savedLocation.longitude === result.longitude
+          ? "saved"
+          : "manual",
+        formatLocationLabel(result),
+      );
+      setSavedLocation(result);
+      setSavedLocationState(result);
+      setLocationError(null);
+      setSearchResults([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function onClearSavedLocation() {
+    setSavedLocation(null);
+    setSavedLocationState(null);
+    setLocationSource((prev) => (prev === "saved" ? null : prev));
+    setSavedLocationState(null);
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between text-sm">
@@ -285,13 +428,85 @@ export default function TodayPage() {
               {current.debugScores.temperatureC.toFixed(1)}°C
             </span>
           ) : null}
-          {coords ? (
+          {locationSource ? (
             <span className="pill">
-              {coords.lat.toFixed(1)}, {coords.lon.toFixed(1)}
+              {locationSource === "device" ? "Device" : activeLocationLabel || "Saved location"}
             </span>
           ) : null}
         </div>
       </div>
+
+      {locationError ? (
+        <section className="app-card rounded-3xl p-4">
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm text-foreground">Location unavailable</div>
+              <div className="mt-1 text-sm muted-copy">{locationError}</div>
+            </div>
+
+            {savedLocation ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => void onUseLocation(savedLocation)}
+                  className="button-secondary"
+                >
+                  Use {formatLocationLabel(savedLocation)}
+                </button>
+                <button
+                  type="button"
+                  onClick={onClearSavedLocation}
+                  className="button-ghost"
+                >
+                  Clear saved location
+                </button>
+              </div>
+            ) : null}
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search city"
+                className="input-base w-full"
+              />
+              <button
+                type="button"
+                onClick={() => void onSearchLocation()}
+                disabled={searchLoading}
+                className="button-secondary"
+              >
+                {searchLoading ? "Searching..." : "Search"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadInitialRecommendation()}
+                className="button-ghost"
+              >
+                Retry device
+              </button>
+            </div>
+
+            {searchError ? <div className="text-sm muted-copy">{searchError}</div> : null}
+
+            {searchResults.length > 0 ? (
+              <div className="space-y-2">
+                {searchResults.map((result) => (
+                  <button
+                    key={`${result.name}-${result.latitude}-${result.longitude}`}
+                    type="button"
+                    onClick={() => void onUseLocation(result)}
+                    className="subtle-card flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left"
+                  >
+                    <span className="text-sm text-foreground">{formatLocationLabel(result)}</span>
+                    <span className="muted-copy text-xs">Use</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <section className="app-card rounded-3xl p-4">
@@ -327,10 +542,7 @@ export default function TodayPage() {
       {loading || !current ? (
         <section className="grid gap-4 md:grid-cols-3">
           {[0, 1, 2].map((index) => (
-            <div
-              key={index}
-              className="app-card shimmer rounded-3xl"
-            >
+            <div key={index} className="app-card shimmer rounded-3xl">
               <div className="h-72 bg-surface-subtle" />
             </div>
           ))}
