@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const BodySchema = z.object({
@@ -15,6 +16,11 @@ function dateKeyToUtcStart(dateKey: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
@@ -25,10 +31,21 @@ export async function POST(req: NextRequest) {
   }
 
   const { dateKey, topItemId, bottomItemId, shoeItemId } = parsed.data;
+  const ownedItems = await prisma.item.findMany({
+    where: {
+      userId: currentUser.appUser.id,
+      id: { in: [topItemId, bottomItemId, shoeItemId] },
+    },
+    select: { id: true },
+  });
 
-  // Avoid spamming identical history entries for the same date.
+  if (ownedItems.length !== 3) {
+    return NextResponse.json({ error: "Invalid outfit items." }, { status: 400 });
+  }
+
   const existing = await prisma.outfitHistory.findFirst({
     where: {
+      userId: currentUser.appUser.id,
       date: dateKeyToUtcStart(dateKey),
       topItemId,
       bottomItemId,
@@ -42,6 +59,7 @@ export async function POST(req: NextRequest) {
 
   const history = await prisma.outfitHistory.create({
     data: {
+      userId: currentUser.appUser.id,
       date: dateKeyToUtcStart(dateKey),
       topItemId,
       bottomItemId,
@@ -51,4 +69,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, history });
 }
-

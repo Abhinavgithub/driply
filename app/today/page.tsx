@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+
 type Item = {
   id: string;
   kind: "TOP" | "BOTTOM" | "SHOE";
@@ -63,7 +65,6 @@ type LocationResult = SavedLocation;
 type LocationSource = "device" | "saved" | "manual" | null;
 
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
-const SAVED_LOCATION_KEY = "driply-saved-location";
 
 function formatEnumLabel(value: string) {
   return value
@@ -113,11 +114,11 @@ function isRetryableGeolocationError(error: GeolocationPositionError) {
   );
 }
 
-function getSavedLocation(): SavedLocation | null {
+function getSavedLocation(savedLocationKey: string): SavedLocation | null {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = window.localStorage.getItem(SAVED_LOCATION_KEY);
+    const raw = window.localStorage.getItem(savedLocationKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SavedLocation;
     if (
@@ -133,13 +134,13 @@ function getSavedLocation(): SavedLocation | null {
   }
 }
 
-function setSavedLocation(next: SavedLocation | null) {
+function setSavedLocation(savedLocationKey: string, next: SavedLocation | null) {
   if (typeof window === "undefined") return;
   if (!next) {
-    window.localStorage.removeItem(SAVED_LOCATION_KEY);
+    window.localStorage.removeItem(savedLocationKey);
     return;
   }
-  window.localStorage.setItem(SAVED_LOCATION_KEY, JSON.stringify(next));
+  window.localStorage.setItem(savedLocationKey, JSON.stringify(next));
 }
 
 function formatLocationLabel(location: SavedLocation) {
@@ -217,6 +218,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function TodayPage() {
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -238,6 +241,33 @@ export default function TodayPage() {
   const pageLimit = 6;
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const current = options[selectedIndex] ?? null;
+  const savedLocationKey = authUserId ? `driply-saved-location:${authUserId}` : null;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const supabase = getBrowserSupabaseClient();
+    let active = true;
+
+    void supabase.auth.getUser().then(({ data }) => {
+      if (!active) return;
+      setAuthUserId(data.user?.id ?? null);
+      setAuthReady(true);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return;
+      setAuthUserId(session?.user?.id ?? null);
+      setAuthReady(true);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const loadRecommendationsForCoordinates = useCallback(
     async (nextCoords: Coordinates, source: LocationSource, locationLabel?: string) => {
@@ -265,6 +295,8 @@ export default function TodayPage() {
   );
 
   const loadInitialRecommendation = useCallback(async () => {
+    if (!savedLocationKey) return;
+
     setLoading(true);
     setError(null);
     setLocationError(null);
@@ -274,7 +306,7 @@ export default function TodayPage() {
     setSelectedIndex(0);
     setCursor(0);
 
-    const storedLocation = getSavedLocation();
+    const storedLocation = getSavedLocation(savedLocationKey);
     setSavedLocationState(storedLocation);
 
     try {
@@ -300,11 +332,12 @@ export default function TodayPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadRecommendationsForCoordinates]);
+  }, [loadRecommendationsForCoordinates, savedLocationKey]);
 
   useEffect(() => {
+    if (!authReady) return;
     void loadInitialRecommendation();
-  }, [loadInitialRecommendation]);
+  }, [authReady, loadInitialRecommendation]);
 
   useEffect(() => {
     setMarked(false);
@@ -387,6 +420,8 @@ export default function TodayPage() {
   }
 
   async function onUseLocation(result: LocationResult) {
+    if (!savedLocationKey) return;
+
     setLoading(true);
     setError(null);
     setSearchError(null);
@@ -400,7 +435,7 @@ export default function TodayPage() {
           : "manual",
         formatLocationLabel(result),
       );
-      setSavedLocation(result);
+      setSavedLocation(savedLocationKey, result);
       setSavedLocationState(result);
       setLocationError(null);
       setSearchResults([]);
@@ -412,10 +447,20 @@ export default function TodayPage() {
   }
 
   function onClearSavedLocation() {
-    setSavedLocation(null);
+    if (!savedLocationKey) return;
+
+    setSavedLocation(savedLocationKey, null);
     setSavedLocationState(null);
     setLocationSource((prev) => (prev === "saved" ? null : prev));
     setSavedLocationState(null);
+  }
+
+  if (!authReady) {
+    return (
+      <section className="app-card rounded-3xl p-6 text-sm muted-copy">
+        Loading...
+      </section>
+    );
   }
 
   return (

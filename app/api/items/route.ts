@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import { promises as fs } from "fs";
 
+import { getCurrentUser } from "@/lib/auth";
+import { deleteWardrobePhoto, attachSignedPhotoUrls, uploadWardrobePhoto } from "@/lib/item-media";
 import { itemAttributePatchSchema, itemAttributesSchema } from "@/lib/itemAttributes";
 import { prisma } from "@/lib/prisma";
 
@@ -50,13 +50,25 @@ function mimeToExt(mimeType: string): string | null {
 }
 
 export async function GET() {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const items = await prisma.item.findMany({
+    where: { userId: currentUser.appUser.id },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json({ items });
+
+  return NextResponse.json({ items: await attachSignedPhotoUrls(items) });
 }
 
 export async function POST(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const formData = await req.formData();
 
   const rawKind = formData.get("kind");
@@ -93,8 +105,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const kindEnum = kindToEnum[parse.data];
-
   if (!rawPhotos || rawPhotos.length === 0) {
     return NextResponse.json({ error: "Missing photo file(s)." }, { status: 400 });
   }
@@ -105,9 +115,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "items");
-  await fs.mkdir(uploadDir, { recursive: true });
   const createdItems = [];
+  const kindEnum = kindToEnum[parse.data];
 
   for (const rawPhoto of rawPhotos) {
     if (!(rawPhoto instanceof Blob) || rawPhoto.size === 0) {
@@ -126,56 +135,87 @@ export async function POST(req: NextRequest) {
     }
 
     const itemId = crypto.randomUUID();
-    const filename = `${itemId}.${ext}`;
-    const relUrl = `/uploads/items/${filename}`;
-    const absPath = path.join(uploadDir, filename);
-
     const bytes = Buffer.from(await rawPhoto.arrayBuffer());
-    await fs.writeFile(absPath, bytes);
 
-    const item = await prisma.item.create({
-      data: {
-        kind: kindEnum,
-        subtype: subtype.trim(),
-        ...attributeParse.data,
-        photoUrl: relUrl,
-      },
-    });
-    createdItems.push(item);
+    let photoPath = "";
+    try {
+      photoPath = await uploadWardrobePhoto({
+        userId: currentUser.appUser.id,
+        itemId,
+        bytes,
+        extension: ext,
+        contentType: rawPhoto.type,
+      });
+
+      const item = await prisma.item.create({
+        data: {
+          id: itemId,
+          userId: currentUser.appUser.id,
+          kind: kindEnum,
+          subtype: subtype.trim(),
+          ...attributeParse.data,
+          photoUrl: photoPath,
+        },
+      });
+
+      createdItems.push(item);
+    } catch (error) {
+      if (photoPath) {
+        await deleteWardrobePhoto(photoPath);
+      }
+      throw error;
+    }
   }
 
-  return NextResponse.json({ items: createdItems });
+  return NextResponse.json({ items: await attachSignedPhotoUrls(createdItems) });
 }
 
 export async function DELETE(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = DeleteBodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid payload: expected itemId." }, { status: 400 });
   }
 
-  const { itemId } = parsed.data;
+  const existingItem = await prisma.item.findFirst({
+    where: { id: parsed.data.itemId, userId: currentUser.appUser.id },
+  });
 
-  // Remove item itself.
-  // Photos are intentionally not deleted from disk for this MVP (see UI setting).
+  if (!existingItem) {
+    return NextResponse.json({ error: "Item not found." }, { status: 404 });
+  }
+
   await prisma.outfitHistory.deleteMany({
     where: {
+      userId: currentUser.appUser.id,
       OR: [
-        { topItemId: itemId },
-        { bottomItemId: itemId },
-        { shoeItemId: itemId },
+        { topItemId: parsed.data.itemId },
+        { bottomItemId: parsed.data.itemId },
+        { shoeItemId: parsed.data.itemId },
       ],
     },
   });
 
-  const deleted = await prisma.item.delete({
-    where: { id: itemId },
+  await prisma.item.delete({
+    where: { id: parsed.data.itemId },
   });
 
-  return NextResponse.json({ ok: true, deleted });
+  await deleteWardrobePhoto(existingItem.photoUrl);
+
+  return NextResponse.json({ ok: true });
 }
 
 export async function PATCH(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = UpdateBodySchema.safeParse(json);
   if (!parsed.success) {
@@ -186,6 +226,14 @@ export async function PATCH(req: NextRequest) {
   }
 
   const { itemId, subtype, ...attributes } = parsed.data;
+  const existingItem = await prisma.item.findFirst({
+    where: { id: itemId, userId: currentUser.appUser.id },
+  });
+
+  if (!existingItem) {
+    return NextResponse.json({ error: "Item not found." }, { status: 404 });
+  }
+
   const updated = await prisma.item.update({
     where: { id: itemId },
     data: {
@@ -194,5 +242,6 @@ export async function PATCH(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({ ok: true, item: updated });
+  const [signedItem] = await attachSignedPhotoUrls([updated]);
+  return NextResponse.json({ ok: true, item: signedItem });
 }

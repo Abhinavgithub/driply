@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getCurrentUser } from "@/lib/auth";
 import { fetchWeather } from "@/lib/openMeteo";
 
 export async function GET(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const latRaw = searchParams.get("lat");
   const lonRaw = searchParams.get("lon");
@@ -17,14 +23,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let out;
   try {
-    out = await fetchWeather(lat, lon);
+    return NextResponse.json(await fetchWeather(lat, lon));
   } catch {
-    return NextResponse.json(
-      { error: "Failed to fetch weather" },
-      { status: 502 },
-    );
+    return NextResponse.json({ error: "Failed to fetch weather" }, { status: 502 });
   }
-  return NextResponse.json(out);
 }
