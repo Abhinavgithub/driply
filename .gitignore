@@ -9,6 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+.npm-cache/
 
 # testing
 /coverage
@@ -22,6 +23,13 @@
 
 # misc
 .DS_Store
+*.DS_Store
+.cursor/
+.codex/
+.sfdx/
+dev.db
+public/uploads/
+tsconfig.tsbuildinfo
 *.pem
 
 # debug
