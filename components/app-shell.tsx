@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
+
+import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type ThemePreference = "system" | "light" | "dark";
 
@@ -48,8 +51,10 @@ function pageMeta(pathname: string) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const meta = useMemo(() => pageMeta(pathname), [pathname]);
   const [themePreference, setThemePreference] = useState<ThemePreference>(getStoredThemePreference);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     applyTheme(themePreference);
@@ -67,6 +72,53 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.localStorage.setItem(THEME_STORAGE_KEY, nextPreference);
     applyTheme(nextPreference);
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const supabase = getBrowserSupabaseClient();
+    let active = true;
+
+    void supabase.auth.getUser().then(({ data }) => {
+      if (active) {
+        setUser(data.user ?? null);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) {
+        setUser(session?.user ?? null);
+      }
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  async function onSignOut() {
+    const supabase = getBrowserSupabaseClient();
+    await supabase.auth.signOut();
+    setUser(null);
+    router.push("/sign-in");
+    router.refresh();
+  }
+
+  const displayName =
+    typeof user?.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name
+      : typeof user?.user_metadata?.name === "string"
+        ? user.user_metadata.name
+        : user?.email ?? "Account";
+  const avatarUrl =
+    typeof user?.user_metadata?.avatar_url === "string"
+      ? user.user_metadata.avatar_url
+      : typeof user?.user_metadata?.picture === "string"
+        ? user.user_metadata.picture
+        : null;
 
   return (
     <div className="page-shell">
@@ -99,23 +151,46 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
 
-          <div className="app-card flex items-center gap-1 rounded-full p-1">
-            {themeOptions.map((option) => {
-              const selected = themePreference === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => onThemeChange(option)}
-                  aria-pressed={selected}
-                  className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] ${
-                    selected ? "bg-foreground text-background" : "text-muted-foreground"
-                  }`}
-                >
-                  {formatThemeLabel(option)}
+          <div className="flex items-center gap-3">
+            {user ? (
+              <div className="flex items-center gap-2 text-sm">
+                {avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : null}
+                <span className="hidden muted-copy sm:inline">{displayName}</span>
+                <button type="button" onClick={() => void onSignOut()} className="text-sm text-foreground">
+                  Sign out
                 </button>
-              );
-            })}
+              </div>
+            ) : (
+              <Link href="/sign-in" className="text-sm text-foreground">
+                Sign in
+              </Link>
+            )}
+
+            <div className="app-card flex items-center gap-1 rounded-full p-1">
+              {themeOptions.map((option) => {
+                const selected = themePreference === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => onThemeChange(option)}
+                    aria-pressed={selected}
+                    className={`rounded-full px-2.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.12em] ${
+                      selected ? "bg-foreground text-background" : "text-muted-foreground"
+                    }`}
+                  >
+                    {formatThemeLabel(option)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </header>

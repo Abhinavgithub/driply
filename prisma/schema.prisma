@@ -1,14 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 enum ItemKind {
@@ -64,33 +59,44 @@ enum WarmthLevel {
   UNKNOWN
 }
 
+model User {
+  id        String         @id @db.Uuid
+  email     String?        @unique
+  name      String?
+  avatarUrl String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  items     Item[]
+  history   OutfitHistory[]
+}
+
 model Item {
-  id String @id @default(cuid())
-
-  createdAt DateTime @default(now())
-
-  kind ItemKind
-  subtype String
-  colorFamily ColorFamily @default(UNKNOWN)
-  pattern Pattern @default(UNKNOWN)
+  id           String       @id @default(cuid())
+  userId       String       @db.Uuid
+  createdAt    DateTime     @default(now())
+  kind         ItemKind
+  subtype      String
+  colorFamily  ColorFamily  @default(UNKNOWN)
+  pattern      Pattern      @default(UNKNOWN)
   styleProfile StyleProfile @default(UNKNOWN)
-  formality Formality @default(UNKNOWN)
-  warmthLevel WarmthLevel @default(UNKNOWN)
+  formality    Formality    @default(UNKNOWN)
+  warmthLevel  WarmthLevel  @default(UNKNOWN)
+  /// Canonical Supabase Storage object path. API responses replace this with a signed URL.
+  photoUrl     String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// Public URL served from Next.js `public/` (example: `/uploads/items/<id>.jpg`)
-  photoUrl String
+  @@index([userId, createdAt])
 }
 
 model OutfitHistory {
-  id String @id @default(cuid())
-
-  /// Date-only (no time component), used for "daily recommendation".
-  date DateTime
-  createdAt DateTime @default(now())
-
-  topItemId String
+  id           String   @id @default(cuid())
+  userId       String   @db.Uuid
+  date         DateTime
+  createdAt    DateTime @default(now())
+  topItemId    String
   bottomItemId String
-  shoeItemId String
+  shoeItemId   String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([date])
+  @@index([userId, date])
 }

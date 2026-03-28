@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getCurrentUser } from "@/lib/auth";
+import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
@@ -17,7 +19,7 @@ const QuerySchema = z.object({
 });
 
 function getServerDateKey() {
-  return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  return new Date().toISOString().slice(0, 10);
 }
 
 function dateKeyToUtcStart(dateKey: string) {
@@ -25,6 +27,11 @@ function dateKeyToUtcStart(dateKey: string) {
 }
 
 export async function GET(req: NextRequest) {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const parsed = QuerySchema.safeParse({
     lat: searchParams.get("lat"),
@@ -45,6 +52,7 @@ export async function GET(req: NextRequest) {
   const dateKey = date ?? getServerDateKey();
 
   const items = await prisma.item.findMany({
+    where: { userId: currentUser.appUser.id },
     orderBy: { createdAt: "desc" },
   });
   const tops = items.filter((i) => i.kind === "TOP");
@@ -72,17 +80,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Failed to fetch weather." }, { status: 502 });
   }
 
-  // Reduce tiny weather fluctuations for more stable recommendations.
-  const temperatureC = Math.round(weather.temperatureC * 2) / 2; // 0.5°C
-  const precipitationMm = Math.round(weather.precipitationMm * 10) / 10; // 0.1mm
+  const temperatureC = Math.round(weather.temperatureC * 2) / 2;
+  const precipitationMm = Math.round(weather.precipitationMm * 10) / 10;
 
-  // Penalize recently worn items for variety (within last 3 days).
   const todayStart = dateKeyToUtcStart(dateKey);
   const cutoff = new Date(todayStart);
   cutoff.setUTCDate(cutoff.getUTCDate() - 3);
 
   const recent = await prisma.outfitHistory.findMany({
     where: {
+      userId: currentUser.appUser.id,
       date: {
         gte: cutoff,
         lt: todayStart,
@@ -93,10 +100,10 @@ export async function GET(req: NextRequest) {
   });
 
   const wornItemIds = new Set<string>();
-  for (const o of recent) {
-    wornItemIds.add(o.topItemId);
-    wornItemIds.add(o.bottomItemId);
-    wornItemIds.add(o.shoeItemId);
+  for (const outfit of recent) {
+    wornItemIds.add(outfit.topItemId);
+    wornItemIds.add(outfit.bottomItemId);
+    wornItemIds.add(outfit.shoeItemId);
   }
 
   const rankedOptions = rankOutfits({
@@ -111,14 +118,22 @@ export async function GET(req: NextRequest) {
     limit,
   });
 
-  const options = rankedOptions.map((o) => ({
-    ...o,
+  const signedItems = await attachSignedPhotoUrls(
+    rankedOptions.flatMap((option) => [option.top, option.bottom, option.shoe]),
+  );
+  const signedById = new Map(signedItems.map((item) => [item.id, item]));
+
+  const options = rankedOptions.map((option) => ({
+    ...option,
+    top: signedById.get(option.top.id) ?? option.top,
+    bottom: signedById.get(option.bottom.id) ?? option.bottom,
+    shoe: signedById.get(option.shoe.id) ?? option.shoe,
     explanation: formatOutfitExplanation({
       temperatureC,
       precipitationMm,
-      top: o.top,
-      bottom: o.bottom,
-      shoe: o.shoe,
+      top: option.top,
+      bottom: option.bottom,
+      shoe: option.shoe,
     }),
   }));
 
