@@ -199,6 +199,28 @@ textarea {
   color: var(--danger);
 }
 
+.profile-menu {
+  z-index: 30;
+}
+
+.profile-menu-action {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  border-radius: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--foreground);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.profile-menu-action:hover,
+.profile-menu-action:focus-visible {
+  background: var(--surface-subtle);
+  outline: none;
+}
+
 .shimmer {
   position: relative;
   overflow: hidden;
