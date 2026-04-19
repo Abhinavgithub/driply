@@ -10,6 +10,7 @@ type Item = {
   kind: "TOP" | "BOTTOM" | "SHOE";
   subtype: string;
   photoUrl: string;
+  visualSummary: string | null;
   colorFamily: string;
   pattern: string;
   styleProfile: string;
@@ -22,6 +23,9 @@ type RecommendationOption = {
   bottom: Item;
   shoe: Item;
   explanation: string;
+  decisionSource: "ai" | "algorithm_fallback";
+  decisionConfidence: number | null;
+  aiReason: string | null;
   totalScore: number;
   debugScores: {
     temperatureC: number;
@@ -45,6 +49,9 @@ type RecommendationOptionsResponse = {
   options: RecommendationOption[];
   offset: number;
   limit: number;
+  decisionSource: "ai" | "algorithm_fallback";
+  decisionConfidence: number | null;
+  aiReason: string | null;
 };
 
 type Coordinates = {
@@ -478,6 +485,11 @@ export default function TodayPage() {
               {locationSource === "device" ? "Device" : activeLocationLabel || "Saved location"}
             </span>
           ) : null}
+          {current ? (
+            <span className="pill">
+              {current.decisionSource === "ai" ? "AI pick" : "Fallback"}
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -651,6 +663,13 @@ export default function TodayPage() {
 
             {showDetails ? (
               <div className="mt-4">
+                <DetailRow
+                  label="Decision"
+                  value={current.decisionSource === "ai" ? "Gemini rerank" : "Algorithm fallback"}
+                />
+                {current.decisionSource === "ai" && current.decisionConfidence !== null ? (
+                  <DetailRow label="Confidence" value={current.decisionConfidence.toFixed(2)} />
+                ) : null}
                 <DetailRow label="Weather" value={current.debugScores.weatherScore.toFixed(2)} />
                 <DetailRow label="Color" value={current.debugScores.colorHarmonyScore.toFixed(2)} />
                 <DetailRow label="Style" value={current.debugScores.styleConsistencyScore.toFixed(2)} />
