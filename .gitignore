@@ -31,6 +31,7 @@ dev.db
 public/uploads/
 tsconfig.tsbuildinfo
 *.pem
+.gemini/settings.json
 
 # debug
 npm-debug.log*
