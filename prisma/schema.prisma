@@ -59,6 +59,19 @@ enum WarmthLevel {
   UNKNOWN
 }
 
+enum AnalysisStatus {
+  PENDING
+  READY
+  FAILED
+  SKIPPED
+}
+
+enum MetadataSource {
+  MANUAL
+  AI
+  MIXED
+}
+
 model User {
   id        String         @id @db.Uuid
   email     String?        @unique
@@ -81,6 +94,13 @@ model Item {
   styleProfile StyleProfile @default(UNKNOWN)
   formality    Formality    @default(UNKNOWN)
   warmthLevel  WarmthLevel  @default(UNKNOWN)
+  analysisStatus AnalysisStatus @default(SKIPPED)
+  metadataSource MetadataSource @default(MANUAL)
+  visualSummary String?
+  analysisConfidence Float?
+  analysisModel String?
+  analysisPromptVersion String?
+  analysisErrorCode String?
   /// Canonical Supabase Storage object path. API responses replace this with a signed URL.
   photoUrl     String
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
