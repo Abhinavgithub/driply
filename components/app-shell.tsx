@@ -95,7 +95,7 @@ function getStoredThemePreference(): ThemePreference {
 }
 
 function pageMeta(pathname: string) {
-  if (pathname === "/" || pathname === "/sign-in") {
+  if (pathname === "/" || pathname === "/sign-in" || pathname === "/sign-up") {
     return {
       title: "",
       showHeading: false,
@@ -221,7 +221,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
-            <Link href={user ? "/today" : "/"} className="text-sm font-semibold tracking-tight text-foreground">
+            <Link href={user ? "/today" : "/"} className="text-xl font-semibold tracking-tight text-foreground">
               driply
             </Link>
             {showAppNav ? (
