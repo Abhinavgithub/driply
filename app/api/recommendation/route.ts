@@ -3,10 +3,11 @@ import { z } from "zod";
 import type { Item } from "@prisma/client";
 
 import { getCurrentUser } from "@/lib/auth";
+import { applyAiRecommendationRerank } from "@/lib/aiRecommendation";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
-import { formatOutfitExplanation, recommendOutfit } from "@/lib/recommendation";
+import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
 
 const QuerySchema = z.object({
   lat: z.coerce.number().finite(),
@@ -103,7 +104,7 @@ export async function GET(req: NextRequest) {
     wornItemIds.add(outfit.shoeItemId);
   }
 
-  const recommendation = recommendOutfit({
+  const rankedOptions = rankOutfits({
     dateKey,
     temperatureC,
     precipitationMm,
@@ -111,7 +112,20 @@ export async function GET(req: NextRequest) {
     bottoms,
     shoes,
     wornItemIds,
+    offset: 0,
+    limit: 6,
   });
+
+  const decision = await applyAiRecommendationRerank({
+    temperatureC,
+    precipitationMm,
+    rankedOptions,
+  });
+  const recommendation = decision.options[0];
+
+  if (!recommendation) {
+    return NextResponse.json({ error: "Missing wardrobe items to form an outfit." }, { status: 400 });
+  }
 
   const signedItems = await attachSignedPhotoUrls([
     recommendation.top,
@@ -126,12 +140,18 @@ export async function GET(req: NextRequest) {
     bottom: signedById.get(recommendation.bottom.id) ?? recommendation.bottom,
     shoe: signedById.get(recommendation.shoe.id) ?? recommendation.shoe,
     debugScores: recommendation.debugScores,
-    explanation: formatOutfitExplanation({
-      temperatureC: weather.temperatureC,
-      precipitationMm: weather.precipitationMm,
-      top: recommendation.top,
-      bottom: recommendation.bottom,
-      shoe: recommendation.shoe,
-    }),
+    explanation:
+      decision.decisionSource === "ai" && decision.aiReason
+        ? decision.aiReason
+        : formatOutfitExplanation({
+            temperatureC: weather.temperatureC,
+            precipitationMm: weather.precipitationMm,
+            top: recommendation.top,
+            bottom: recommendation.bottom,
+            shoe: recommendation.shoe,
+          }),
+    decisionSource: decision.decisionSource,
+    decisionConfidence: decision.decisionConfidence,
+    aiReason: decision.aiReason,
   });
 }

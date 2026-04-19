@@ -7,7 +7,9 @@ import {
   defaultItemAttributes,
   formalities,
   formatEnumLabel,
+  getDefaultSubtypeForKind,
   hasUnknownAttributes,
+  itemKinds,
   itemSubtypeOptions,
   patterns,
   styleProfiles,
@@ -21,6 +23,10 @@ type Item = {
   kind: "TOP" | "BOTTOM" | "SHOE";
   subtype: string;
   photoUrl: string;
+  analysisStatus: "PENDING" | "READY" | "FAILED" | "SKIPPED";
+  metadataSource: "MANUAL" | "AI" | "MIXED";
+  visualSummary: string | null;
+  analysisConfidence: number | null;
 } & ItemAttributeValues;
 
 function kindLabel(kind: Item["kind"]) {
@@ -38,12 +44,28 @@ function makeAttributeState(): ItemAttributeValues {
   return { ...defaultItemAttributes };
 }
 
-function StatusBadge({ complete }: { complete: boolean }) {
+function StatusBadge({ tone, label }: { tone: "success" | "warning"; label: string }) {
   return (
-    <span className={`pill ${complete ? "pill-success" : "pill-warning"}`}>
-      {complete ? "Ready" : "Needs details"}
+    <span className={`pill ${tone === "success" ? "pill-success" : "pill-warning"}`}>
+      {label}
     </span>
   );
+}
+
+function getItemStatus(item: Item) {
+  if (item.analysisStatus === "PENDING") {
+    return { tone: "warning" as const, label: "Analyzing" };
+  }
+  if (item.analysisStatus === "FAILED" || hasUnknownAttributes(item)) {
+    return { tone: "warning" as const, label: "Needs review" };
+  }
+  if (item.metadataSource === "MIXED") {
+    return { tone: "success" as const, label: "Manual override" };
+  }
+  if (item.metadataSource === "AI") {
+    return { tone: "success" as const, label: "AI filled" };
+  }
+  return { tone: "success" as const, label: "Ready" };
 }
 
 export default function LibraryPage() {
@@ -56,11 +78,13 @@ export default function LibraryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [kind, setKind] = useState<Item["kind"]>("TOP");
-  const [subtype, setSubtype] = useState<string>(itemSubtypeOptions.TOP[0]);
+  const [subtype, setSubtype] = useState<string>(getDefaultSubtypeForKind("TOP"));
   const [files, setFiles] = useState<File[]>([]);
   const [attributes, setAttributes] = useState<ItemAttributeValues>(makeAttributeState);
-  const [editForm, setEditForm] = useState<{ subtype: string } & ItemAttributeValues>({
-    subtype: itemSubtypeOptions.TOP[0],
+  const [showManualDetails, setShowManualDetails] = useState(false);
+  const [editForm, setEditForm] = useState<{ kind: Item["kind"]; subtype: string } & ItemAttributeValues>({
+    kind: "TOP",
+    subtype: getDefaultSubtypeForKind("TOP"),
     ...makeAttributeState(),
   });
 
@@ -82,10 +106,6 @@ export default function LibraryPage() {
       { TOP: [] as Item[], BOTTOM: [] as Item[], SHOE: [] as Item[] },
     );
   }, [items]);
-
-  useEffect(() => {
-    setSubtype(itemSubtypeOptions[kind][0]);
-  }, [kind]);
 
   function renderAttributeSelect<K extends keyof ItemAttributeValues>(
     field: K,
@@ -137,9 +157,12 @@ export default function LibraryPage() {
 
       const formData = new FormData();
       for (const f of files) formData.append("photo", f);
-      formData.set("kind", kind.toLowerCase());
-      formData.set("subtype", subtype);
+      if (showManualDetails) {
+        formData.set("kind", kind);
+        formData.set("subtype", subtype);
+      }
       for (const [key, value] of Object.entries(attributes)) {
+        if (!showManualDetails || value === "UNKNOWN") continue;
         formData.set(key, value);
       }
 
@@ -153,6 +176,9 @@ export default function LibraryPage() {
       await refreshItems();
       setFiles([]);
       setAttributes(makeAttributeState());
+      setShowManualDetails(false);
+      setKind("TOP");
+      setSubtype(getDefaultSubtypeForKind("TOP"));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -184,6 +210,7 @@ export default function LibraryPage() {
   function beginEdit(item: Item) {
     setEditingId(item.id);
     setEditForm({
+      kind: item.kind,
       subtype: item.subtype,
       colorFamily: item.colorFamily,
       pattern: item.pattern,
@@ -230,7 +257,7 @@ export default function LibraryPage() {
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-1">
           <label className="field-label">
             <span>Photo</span>
             <input
@@ -251,53 +278,76 @@ export default function LibraryPage() {
               className="input-base pt-3"
             />
           </label>
-
-          <label className="field-label">
-            <span>Kind</span>
-            <select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as Item["kind"])}
-              className="input-base"
-            >
-              <option value="TOP">Top</option>
-              <option value="BOTTOM">Bottom</option>
-              <option value="SHOE">Shoe</option>
-            </select>
-          </label>
-
-          <label className="field-label">
-            <span>Subtype</span>
-            <select
-              value={subtype}
-              onChange={(e) => setSubtype(e.target.value)}
-              className="input-base"
-            >
-              {itemSubtypeOptions[kind].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {renderAttributeSelect("colorFamily", attributes.colorFamily, (value) =>
-            setAttributes((prev) => ({ ...prev, colorFamily: value }))
-          )}
-          {renderAttributeSelect("pattern", attributes.pattern, (value) =>
-            setAttributes((prev) => ({ ...prev, pattern: value }))
-          )}
-          {renderAttributeSelect("styleProfile", attributes.styleProfile, (value) =>
-            setAttributes((prev) => ({ ...prev, styleProfile: value }))
-          )}
-          {renderAttributeSelect("formality", attributes.formality, (value) =>
-            setAttributes((prev) => ({ ...prev, formality: value }))
-          )}
-          {renderAttributeSelect("warmthLevel", attributes.warmthLevel, (value) =>
-            setAttributes((prev) => ({ ...prev, warmthLevel: value }))
-          )}
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <div className="text-sm muted-copy">Optional details</div>
+          <button
+            type="button"
+            onClick={() => setShowManualDetails((prev) => !prev)}
+            className="button-ghost"
+          >
+            {showManualDetails ? "Hide" : "Add details"}
+          </button>
         </div>
+
+        {showManualDetails ? (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="field-label">
+                <span>Kind</span>
+                <select
+                  value={kind}
+                  onChange={(e) => {
+                    const nextKind = e.target.value as Item["kind"];
+                    setKind(nextKind);
+                    setSubtype(getDefaultSubtypeForKind(nextKind));
+                  }}
+                  className="input-base"
+                >
+                  {itemKinds.map((option) => (
+                    <option key={option} value={option}>
+                      {formatEnumLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field-label">
+                <span>Subtype</span>
+                <select
+                  value={subtype}
+                  onChange={(e) => setSubtype(e.target.value)}
+                  className="input-base"
+                >
+                  {itemSubtypeOptions[kind].map((option) => (
+                    <option key={option} value={option}>
+                      {formatEnumLabel(option)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {renderAttributeSelect("colorFamily", attributes.colorFamily, (value) =>
+              setAttributes((prev) => ({ ...prev, colorFamily: value }))
+            )}
+            {renderAttributeSelect("pattern", attributes.pattern, (value) =>
+              setAttributes((prev) => ({ ...prev, pattern: value }))
+            )}
+            {renderAttributeSelect("styleProfile", attributes.styleProfile, (value) =>
+              setAttributes((prev) => ({ ...prev, styleProfile: value }))
+            )}
+            {renderAttributeSelect("formality", attributes.formality, (value) =>
+              setAttributes((prev) => ({ ...prev, formality: value }))
+            )}
+            {renderAttributeSelect("warmthLevel", attributes.warmthLevel, (value) =>
+              setAttributes((prev) => ({ ...prev, warmthLevel: value }))
+            )}
+            </div>
+          </div>
+        ) : null}
       </form>
 
       {items.length === 0 ? (
@@ -318,7 +368,7 @@ export default function LibraryPage() {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((it) => {
                 const isEditing = editingId === it.id;
-                const needsDetails = hasUnknownAttributes(it);
+                const status = getItemStatus(it);
 
                 return (
                   <article key={it.id} className="app-card overflow-hidden rounded-3xl">
@@ -334,13 +384,41 @@ export default function LibraryPage() {
                           <div className="text-base font-medium text-foreground">
                             {formatEnumLabel(it.subtype)}
                           </div>
-                          <div className="mt-1 text-sm muted-copy">{kindLabel(it.kind)}</div>
+                          <div className="mt-1 text-sm muted-copy">
+                            {kindLabel(it.kind)}
+                            {it.metadataSource === "AI" ? " · AI picked kind/subtype" : null}
+                          </div>
+                          {it.visualSummary ? (
+                            <div className="mt-2 text-sm muted-copy">{it.visualSummary}</div>
+                          ) : null}
                         </div>
-                        <StatusBadge complete={!needsDetails} />
+                        <StatusBadge tone={status.tone} label={status.label} />
                       </div>
 
                       {isEditing ? (
                         <div className="space-y-4">
+                          <label className="field-label">
+                            <span>Kind</span>
+                            <select
+                              value={editForm.kind}
+                              onChange={(e) => {
+                                const nextKind = e.target.value as Item["kind"];
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  kind: nextKind,
+                                  subtype: getDefaultSubtypeForKind(nextKind),
+                                }));
+                              }}
+                              className="input-base"
+                            >
+                              {itemKinds.map((option) => (
+                                <option key={option} value={option}>
+                                  {formatEnumLabel(option)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
                           <label className="field-label">
                             <span>Subtype</span>
                             <select
@@ -350,9 +428,9 @@ export default function LibraryPage() {
                               }
                               className="input-base"
                             >
-                              {itemSubtypeOptions[it.kind].map((option) => (
+                              {itemSubtypeOptions[editForm.kind].map((option) => (
                                 <option key={option} value={option}>
-                                  {option}
+                                  {formatEnumLabel(option)}
                                 </option>
                               ))}
                             </select>

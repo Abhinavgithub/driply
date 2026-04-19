@@ -8,12 +8,13 @@ import type {
   WarmthLevel,
 } from "@prisma/client";
 
-type ItemWithAttributes = Pick<
+export type ItemWithAttributes = Pick<
   Item,
   | "id"
   | "kind"
   | "subtype"
   | "photoUrl"
+  | "visualSummary"
   | "colorFamily"
   | "pattern"
   | "styleProfile"
@@ -21,7 +22,7 @@ type ItemWithAttributes = Pick<
   | "warmthLevel"
 >;
 
-type ScoreBreakdown = {
+export type ScoreBreakdown = {
   temperatureC: number;
   precipitationMm: number;
   isRaining: boolean;
@@ -44,6 +45,10 @@ export type RecommendationResult = {
   totalScore: number;
   debugScores: ScoreBreakdown;
 };
+
+export function getRecommendationCandidateId(result: Pick<RecommendationResult, "top" | "bottom" | "shoe">) {
+  return [result.top.id, result.bottom.id, result.shoe.id].join("|");
+}
 
 const WEATHER_WEIGHT = 0.45;
 const COLOR_WEIGHT = 0.2;
@@ -95,6 +100,7 @@ function baseTempScore(kind: ItemKind, subtype: string, temperatureC: number) {
   switch (kind) {
     case "TOP": {
       if (st === "tshirt") return rangeScore(temperatureC, 22, 50);
+      if (st === "shirt") return rangeScore(temperatureC, 16, 30);
       if (st === "long_sleeve") return rangeScore(temperatureC, 10, 22);
       if (st === "hoodie" || st === "sweater") return rangeScore(temperatureC, -10, 14);
       if (st === "jacket") return rangeScore(temperatureC, -50, 8);
@@ -133,6 +139,8 @@ function rainBonusForCombo(args: {
     score +=
       topSt === "tshirt"
         ? -2
+        : topSt === "shirt"
+          ? 0
         : topSt === "long_sleeve"
           ? -1
           : topSt === "hoodie" || topSt === "sweater" || topSt === "jacket"
@@ -146,7 +154,18 @@ function rainBonusForCombo(args: {
 
   let score = 0;
   score += shoeSt === "sandals" ? (temperatureC >= 22 ? 3 : -1) : shoeSt === "boots" ? -1 : 1;
-  score += topSt === "tshirt" ? (temperatureC >= 22 ? 3 : -1) : topSt === "jacket" ? -1 : 1;
+  score +=
+    topSt === "tshirt"
+      ? temperatureC >= 22
+        ? 3
+        : -1
+      : topSt === "shirt"
+        ? temperatureC >= 16 && temperatureC <= 30
+          ? 2
+          : 0
+        : topSt === "jacket"
+          ? -1
+          : 1;
   score += bottomSt === "shorts" ? (temperatureC >= 18 ? 2 : -1) : bottomSt === "jeans" ? 1 : 0;
   return score;
 }
@@ -475,8 +494,8 @@ export function formatOutfitExplanation(args: {
     .slice(0, 2);
 
   const weatherLead = isRaining
-    ? `It’s ${tempLabel} with rain, so this combo stays weather-appropriate.`
-    : `It’s ${tempLabel}, and this combo fits the weather.`;
+    ? `It's ${tempLabel} with rain, so this combo stays weather-appropriate.`
+    : `It's ${tempLabel}, and this combo fits the weather.`;
 
   if (!reasons.length) return weatherLead;
 

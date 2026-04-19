@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
+import { applyAiRecommendationRerank } from "@/lib/aiRecommendation";
 import { getCurrentUser } from "@/lib/auth";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
     wornItemIds.add(outfit.shoeItemId);
   }
 
-  const rankedOptions = rankOutfits({
+  const baseRankedOptions = rankOutfits({
     dateKey,
     temperatureC,
     precipitationMm,
@@ -114,9 +115,28 @@ export async function GET(req: NextRequest) {
     bottoms,
     shoes,
     wornItemIds,
-    offset,
-    limit,
+    offset: 0,
+    limit: offset === 0 ? Math.max(limit, 6) : offset + limit,
   });
+
+  const decision =
+    offset === 0
+      ? await applyAiRecommendationRerank({
+          temperatureC,
+          precipitationMm,
+          rankedOptions: baseRankedOptions,
+        })
+      : {
+          options: baseRankedOptions,
+          decisionSource: "algorithm_fallback" as const,
+          decisionConfidence: null,
+          aiReason: null,
+        };
+
+  const rankedOptions: NonNullable<(typeof decision.options)[number]>[] = [];
+  for (const option of decision.options.slice(offset, offset + limit)) {
+    if (option) rankedOptions.push(option);
+  }
 
   const signedItems = await attachSignedPhotoUrls(
     rankedOptions.flatMap((option) => [option.top, option.bottom, option.shoe]),
@@ -128,13 +148,28 @@ export async function GET(req: NextRequest) {
     top: signedById.get(option.top.id) ?? option.top,
     bottom: signedById.get(option.bottom.id) ?? option.bottom,
     shoe: signedById.get(option.shoe.id) ?? option.shoe,
-    explanation: formatOutfitExplanation({
-      temperatureC,
-      precipitationMm,
-      top: option.top,
-      bottom: option.bottom,
-      shoe: option.shoe,
-    }),
+    explanation:
+      decision.decisionSource === "ai" && decision.aiReason && option === rankedOptions[0] && offset === 0
+        ? decision.aiReason
+        : formatOutfitExplanation({
+            temperatureC,
+            precipitationMm,
+            top: option.top,
+            bottom: option.bottom,
+            shoe: option.shoe,
+          }),
+    decisionSource:
+      decision.decisionSource === "ai" && option === rankedOptions[0] && offset === 0
+        ? "ai"
+        : "algorithm_fallback",
+    decisionConfidence:
+      decision.decisionSource === "ai" && option === rankedOptions[0] && offset === 0
+        ? decision.decisionConfidence
+        : null,
+    aiReason:
+      decision.decisionSource === "ai" && option === rankedOptions[0] && offset === 0
+        ? decision.aiReason
+        : null,
   }));
 
   return NextResponse.json({
@@ -142,5 +177,8 @@ export async function GET(req: NextRequest) {
     options,
     offset,
     limit,
+    decisionSource: decision.decisionSource,
+    decisionConfidence: decision.decisionConfidence,
+    aiReason: decision.aiReason,
   });
 }
