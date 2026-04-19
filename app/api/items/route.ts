@@ -2,22 +2,42 @@ import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
+import {
+  buildFallbackVisualSummary,
+  classifyWardrobeImage,
+  getAiClassificationDisabledReason,
+  getClassifierModel,
+  getClassifierPromptVersion,
+  getGeminiErrorCode,
+  getGeminiErrorMessage,
+  isAiClassificationEnabled,
+} from "@/lib/gemini";
 import { deleteWardrobePhoto, attachSignedPhotoUrls, uploadWardrobePhoto } from "@/lib/item-media";
-import { itemAttributePatchSchema, itemAttributesSchema } from "@/lib/itemAttributes";
+import {
+  hasUnknownAttributes,
+  isValidSubtypeForKind,
+  itemKindSchema,
+  itemAttributePatchSchema,
+  mergeItemAttributes,
+  pickProvidedItemAttributes,
+  type ItemKindValue,
+  type ItemAttributeValues,
+} from "@/lib/itemAttributes";
 import { prisma } from "@/lib/prisma";
 
-const KindInputSchema = z.enum(["top", "bottom", "shoe"]);
 const DeleteBodySchema = z.object({
   itemId: z.string().min(1),
 });
 const UpdateBodySchema = z
   .object({
     itemId: z.string().min(1),
+    kind: itemKindSchema.optional(),
     subtype: z.string().trim().min(1).optional(),
   })
   .extend(itemAttributePatchSchema.shape)
   .refine(
     (value) =>
+      value.kind !== undefined ||
       value.subtype !== undefined ||
       value.colorFamily !== undefined ||
       value.pattern !== undefined ||
@@ -27,12 +47,26 @@ const UpdateBodySchema = z
     { message: "Expected at least one editable field." },
   );
 const MAX_UPLOAD_PHOTOS = 10;
+const ITEM_ATTRIBUTE_KEYS = [
+  "colorFamily",
+  "pattern",
+  "styleProfile",
+  "formality",
+  "warmthLevel",
+] as const;
 
-const kindToEnum = {
-  top: "TOP",
-  bottom: "BOTTOM",
-  shoe: "SHOE",
-} as const;
+type UploadResolution = {
+  kind: ItemKindValue;
+  subtype: string;
+  analysisStatus: "PENDING" | "READY" | "FAILED" | "SKIPPED";
+  metadataSource: "MANUAL" | "AI" | "MIXED";
+  visualSummary: string | null;
+  analysisConfidence: number | null;
+  analysisModel: string | null;
+  analysisPromptVersion: string | null;
+  analysisErrorCode: string | null;
+  attributes: ItemAttributeValues;
+};
 
 function mimeToExt(mimeType: string): string | null {
   switch (mimeType) {
@@ -46,6 +80,177 @@ function mimeToExt(mimeType: string): string | null {
       return "gif";
     default:
       return null;
+  }
+}
+
+function mergeUnknownAttributes(
+  currentAttributes: ItemAttributeValues,
+  aiAttributes: ItemAttributeValues,
+): ItemAttributeValues {
+  const next = { ...currentAttributes };
+
+  for (const key of ITEM_ATTRIBUTE_KEYS) {
+    if (next[key] === "UNKNOWN" && aiAttributes[key] !== "UNKNOWN") {
+      switch (key) {
+        case "colorFamily":
+          next.colorFamily = aiAttributes.colorFamily;
+          break;
+        case "pattern":
+          next.pattern = aiAttributes.pattern;
+          break;
+        case "styleProfile":
+          next.styleProfile = aiAttributes.styleProfile;
+          break;
+        case "formality":
+          next.formality = aiAttributes.formality;
+          break;
+        case "warmthLevel":
+          next.warmthLevel = aiAttributes.warmthLevel;
+          break;
+      }
+    }
+  }
+
+  return next;
+}
+
+function countAiFilledAttributes(
+  currentAttributes: ItemAttributeValues,
+  nextAttributes: ItemAttributeValues,
+) {
+  return ITEM_ATTRIBUTE_KEYS.filter(
+    (key) => currentAttributes[key] === "UNKNOWN" && nextAttributes[key] !== "UNKNOWN",
+  ).length;
+}
+
+function normalizeKindInput(rawKind: FormDataEntryValue | null) {
+  if (typeof rawKind !== "string") return undefined;
+
+  const normalized = rawKind.trim().toUpperCase();
+  return itemKindSchema.safeParse(normalized).success ? (normalized as ItemKindValue) : undefined;
+}
+
+function normalizeSubtypeInput(rawSubtype: FormDataEntryValue | null) {
+  if (typeof rawSubtype !== "string") return undefined;
+  const trimmed = rawSubtype.trim().toLowerCase();
+  return trimmed.length ? trimmed : undefined;
+}
+
+async function resolveUploadMetadata(args: {
+  bytes: Buffer;
+  manualKind?: ItemKindValue;
+  manualSubtype?: string;
+  manualAttributes: ItemAttributeValues;
+}) {
+  const { bytes, manualKind, manualSubtype, manualAttributes } = args;
+
+  const needsAiForKind = !manualKind || !manualSubtype;
+  const needsAiForAttributes = hasUnknownAttributes(manualAttributes);
+  const shouldAttemptAi = isAiClassificationEnabled() && (needsAiForKind || needsAiForAttributes);
+
+  if (!shouldAttemptAi) {
+    if (!manualKind || !manualSubtype) {
+      console.info("[gemini:classification] skipped", {
+        reason: getAiClassificationDisabledReason() || "Missing manual kind/subtype and AI classification disabled",
+        manualKind,
+        manualSubtype,
+      });
+      throw new Error("AI could not infer kind and subtype. Add them in optional details or enable AI classification.");
+    }
+
+    return {
+      kind: manualKind,
+      subtype: manualSubtype,
+      analysisStatus: hasUnknownAttributes(manualAttributes) ? "SKIPPED" : "READY",
+      metadataSource: "MANUAL",
+      visualSummary: buildFallbackVisualSummary({
+        subtype: manualSubtype,
+        attributes: manualAttributes,
+      }),
+      analysisConfidence: null,
+      analysisModel: null,
+      analysisPromptVersion: null,
+      analysisErrorCode: null,
+      attributes: manualAttributes,
+    } satisfies UploadResolution;
+  }
+
+  try {
+    const classification = await classifyWardrobeImage({
+      imageBytes: bytes,
+      manualKind: manualKind ?? null,
+      manualSubtype: manualSubtype ?? null,
+    });
+
+    const resolvedKind = manualKind ?? classification.kind;
+    const resolvedSubtype =
+      manualSubtype && isValidSubtypeForKind(resolvedKind, manualSubtype)
+        ? manualSubtype
+        : classification.kind === resolvedKind && isValidSubtypeForKind(resolvedKind, classification.subtype)
+          ? classification.subtype
+          : null;
+
+    if (!resolvedSubtype) {
+      throw new Error("AI returned an invalid subtype for the resolved kind.");
+    }
+
+    const mergedAttributes = mergeUnknownAttributes(manualAttributes, classification);
+    const aiFilledCount = countAiFilledAttributes(manualAttributes, mergedAttributes);
+    const usedAiKindSubtype = !manualKind || !manualSubtype;
+    const usedAiOutput =
+      usedAiKindSubtype || aiFilledCount > 0 || Boolean(classification.visualSummary);
+    const hasManualOverrides =
+      Boolean(manualKind && manualSubtype) || Object.values(manualAttributes).some((value) => value !== "UNKNOWN");
+
+    return {
+      kind: resolvedKind,
+      subtype: resolvedSubtype,
+      analysisStatus: "READY",
+      metadataSource: hasManualOverrides
+        ? usedAiOutput
+          ? "MIXED"
+          : "MANUAL"
+        : "AI",
+      visualSummary:
+        classification.visualSummary ||
+        buildFallbackVisualSummary({
+          subtype: resolvedSubtype,
+          attributes: mergedAttributes,
+        }),
+      analysisConfidence: classification.confidence,
+      analysisModel: classification.model,
+      analysisPromptVersion: classification.promptVersion,
+      analysisErrorCode: null,
+      attributes: mergedAttributes,
+    } satisfies UploadResolution;
+  } catch (error) {
+    console.info("[gemini:classification] failed", {
+      reason: "Gemini item classification failed",
+      code: getGeminiErrorCode(error),
+      message: getGeminiErrorMessage(error),
+      manualKind,
+      manualSubtype,
+    });
+
+    if (!manualKind || !manualSubtype) {
+      throw new Error("AI could not infer kind and subtype. Add them in optional details and try again.");
+    }
+
+    return {
+      kind: manualKind,
+      subtype: manualSubtype,
+      analysisStatus: "FAILED",
+      metadataSource: "MANUAL",
+      visualSummary: buildFallbackVisualSummary({
+        subtype: manualSubtype,
+        attributes: manualAttributes,
+      }),
+      analysisConfidence: null,
+      analysisModel: getClassifierModel(),
+      analysisPromptVersion: getClassifierPromptVersion(),
+      analysisErrorCode: getGeminiErrorCode(error),
+      attributes: manualAttributes,
+    } satisfies UploadResolution;
   }
 }
 
@@ -71,8 +276,8 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
 
-  const rawKind = formData.get("kind");
-  const rawSubtype = formData.get("subtype");
+  const manualKind = normalizeKindInput(formData.get("kind"));
+  const manualSubtype = normalizeSubtypeInput(formData.get("subtype"));
   const rawPhotos = formData.getAll("photo");
   const rawAttributes = {
     colorFamily: formData.get("colorFamily"),
@@ -82,9 +287,7 @@ export async function POST(req: NextRequest) {
     warmthLevel: formData.get("warmthLevel"),
   };
 
-  const kind = typeof rawKind === "string" ? rawKind : undefined;
-  const subtype = typeof rawSubtype === "string" ? rawSubtype : undefined;
-  const attributeParse = itemAttributesSchema.safeParse({
+  const attributeParse = itemAttributePatchSchema.safeParse({
     colorFamily: typeof rawAttributes.colorFamily === "string" ? rawAttributes.colorFamily : undefined,
     pattern: typeof rawAttributes.pattern === "string" ? rawAttributes.pattern : undefined,
     styleProfile: typeof rawAttributes.styleProfile === "string" ? rawAttributes.styleProfile : undefined,
@@ -92,15 +295,23 @@ export async function POST(req: NextRequest) {
     warmthLevel: typeof rawAttributes.warmthLevel === "string" ? rawAttributes.warmthLevel : undefined,
   });
 
-  const parse = KindInputSchema.safeParse(kind);
-  if (
-    !parse.success ||
-    typeof subtype !== "string" ||
-    subtype.trim().length < 1 ||
-    !attributeParse.success
-  ) {
+  if (!attributeParse.success) {
     return NextResponse.json(
-      { error: "Invalid payload. Expected kind, subtype, attributes, and photo." },
+      { error: "Invalid payload. Expected optional kind, subtype, attributes, and photo." },
+      { status: 400 },
+    );
+  }
+
+  if ((manualKind && !manualSubtype) || (!manualKind && manualSubtype)) {
+    return NextResponse.json(
+      { error: "Kind and subtype must be provided together when added as optional details." },
+      { status: 400 },
+    );
+  }
+
+  if (manualKind && manualSubtype && !isValidSubtypeForKind(manualKind, manualSubtype)) {
+    return NextResponse.json(
+      { error: "Subtype does not match the selected kind." },
       { status: 400 },
     );
   }
@@ -116,7 +327,8 @@ export async function POST(req: NextRequest) {
   }
 
   const createdItems = [];
-  const kindEnum = kindToEnum[parse.data];
+  const providedManualAttributes = pickProvidedItemAttributes(attributeParse.data);
+  const manualAttributes = mergeItemAttributes(providedManualAttributes);
 
   for (const rawPhoto of rawPhotos) {
     if (!(rawPhoto instanceof Blob) || rawPhoto.size === 0) {
@@ -147,17 +359,30 @@ export async function POST(req: NextRequest) {
         contentType: rawPhoto.type,
       });
 
+      const resolved = await resolveUploadMetadata({
+        bytes,
+        manualKind,
+        manualSubtype,
+        manualAttributes,
+      });
+
       const item = await prisma.item.create({
         data: {
           id: itemId,
           userId: currentUser.appUser.id,
-          kind: kindEnum,
-          subtype: subtype.trim(),
-          ...attributeParse.data,
+          kind: resolved.kind,
+          subtype: resolved.subtype,
+          ...resolved.attributes,
+          analysisStatus: resolved.analysisStatus,
+          metadataSource: resolved.metadataSource,
+          visualSummary: resolved.visualSummary,
+          analysisConfidence: resolved.analysisConfidence,
+          analysisModel: resolved.analysisModel,
+          analysisPromptVersion: resolved.analysisPromptVersion,
+          analysisErrorCode: resolved.analysisErrorCode,
           photoUrl: photoPath,
         },
       });
-
       createdItems.push(item);
     } catch (error) {
       if (photoPath) {
@@ -225,7 +450,7 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const { itemId, subtype, ...attributes } = parsed.data;
+  const { itemId, kind, subtype, ...attributes } = parsed.data;
   const existingItem = await prisma.item.findFirst({
     where: { id: itemId, userId: currentUser.appUser.id },
   });
@@ -234,11 +459,47 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
+  const nextKind = kind ?? existingItem.kind;
+  const nextSubtype = subtype?.trim() ?? existingItem.subtype;
+  if (!isValidSubtypeForKind(nextKind, nextSubtype)) {
+    return NextResponse.json(
+      { error: "Subtype does not match the selected kind." },
+      { status: 400 },
+    );
+  }
+
   const updated = await prisma.item.update({
     where: { id: itemId },
     data: {
-      ...(subtype ? { subtype: subtype.trim() } : {}),
+      ...(kind ? { kind } : {}),
+      ...(subtype ? { subtype: nextSubtype } : {}),
       ...attributes,
+      analysisStatus: hasUnknownAttributes(
+        mergeItemAttributes({
+          colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
+          pattern: attributes.pattern ?? existingItem.pattern,
+          styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
+          formality: attributes.formality ?? existingItem.formality,
+          warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
+        }),
+      )
+        ? "SKIPPED"
+        : "READY",
+      metadataSource: "MANUAL",
+      visualSummary: buildFallbackVisualSummary({
+        subtype: nextSubtype,
+        attributes: {
+          colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
+          pattern: attributes.pattern ?? existingItem.pattern,
+          styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
+          formality: attributes.formality ?? existingItem.formality,
+          warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
+        },
+      }),
+      analysisConfidence: null,
+      analysisModel: null,
+      analysisPromptVersion: null,
+      analysisErrorCode: null,
     },
   });
 
