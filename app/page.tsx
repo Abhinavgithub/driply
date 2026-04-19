@@ -73,12 +73,12 @@ export default async function Home() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(17,17,17,0.08),transparent_38%),radial-gradient(circle_at_bottom_right,rgba(17,17,17,0.05),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.08),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(255,255,255,0.05),transparent_34%)]" />
         <div className="relative grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div className="max-w-2xl">
-            <div className="pill mb-5">Personal wardrobe assistant</div>
+            <div className="pill mb-5">Your AI wardrobe assistant</div>
             <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-              Outfit recommendations from clothes you already own.
+              Wear more of what you already own.
             </h1>
             <p className="mt-5 max-w-lg text-base leading-7 muted-copy sm:text-lg">
-              Upload your wardrobe once, then get daily outfit combinations based on weather, color harmony, and style fit.
+              driply turns your closet into daily ready fits, tuned to the weather, your vibe, and colors that actually match.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -95,15 +95,15 @@ export default async function Home() {
       <section className="grid gap-4 md:grid-cols-3">
         <FeatureCard
           title="Upload your wardrobe"
-          body="Add tops, bottoms, and shoes once with simple attributes so Driply can work with your real closet."
+          body="Add your clothing once and let driply build a digital closet from the pieces you already wear."
         />
         <FeatureCard
           title="Get daily outfit picks"
-          body="See complete looks built around weather, style consistency, and color combinations that make sense."
+          body="Receive thoughtful outfit suggestions based on weather, color harmony, and your personal style."
         />
         <FeatureCard
           title="Keep it personal"
-          body="Your wardrobe stays private to your account, and your recommendations improve as your closet grows."
+          body="Your wardrobe stays private, while driply learns your preferences and improves recommendations over time."
         />
       </section>
     </div>

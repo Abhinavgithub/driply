@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { EmailAuthForm } from "@/components/email-auth-form";
 import { GoogleAuthButton } from "@/components/google-auth-button";
 import { normalizeNextPath } from "@/lib/navigation";
 
@@ -28,6 +29,14 @@ export default function SignUpPageClient() {
         <GoogleAuthButton className="button-primary mt-6 w-full gap-2" nextPath={nextPath} onError={setError}>
           Sign up with Google
         </GoogleAuthButton>
+
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-[1px] flex-1 bg-white/10" />
+          <span className="text-xs font-medium uppercase muted-copy">or</span>
+          <div className="h-[1px] flex-1 bg-white/10" />
+        </div>
+
+        <EmailAuthForm mode="sign-up" nextPath={nextPath} onError={setError} />
 
         <p className="mt-4 text-sm muted-copy">
           Already have an account?{" "}
