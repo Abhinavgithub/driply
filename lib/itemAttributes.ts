@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const itemKinds = ["TOP", "BOTTOM", "SHOE"] as const;
+export const itemKindSchema = z.enum(itemKinds);
 export const colorFamilies = [
   "BLACK",
   "WHITE",
@@ -35,10 +36,19 @@ export const formalities = ["RELAXED", "ELEVATED", "DRESSY", "UNKNOWN"] as const
 export const warmthLevels = ["LIGHT", "MID", "WARM", "UNKNOWN"] as const;
 
 export const itemSubtypeOptions = {
-  TOP: ["tshirt", "long_sleeve", "hoodie", "sweater", "jacket"],
+  TOP: ["tshirt", "shirt", "long_sleeve", "hoodie", "sweater", "jacket"],
   BOTTOM: ["shorts", "jeans"],
   SHOE: ["sneakers", "boots", "sandals"],
 } as const;
+
+export const itemSubtypes = [
+  ...itemSubtypeOptions.TOP,
+  ...itemSubtypeOptions.BOTTOM,
+  ...itemSubtypeOptions.SHOE,
+] as const;
+
+export type ItemKindValue = (typeof itemKinds)[number];
+export type ItemSubtypeValue = (typeof itemSubtypes)[number];
 
 export const itemAttributeEnums = {
   colorFamily: z.enum(colorFamilies),
@@ -53,6 +63,7 @@ export const itemAttributesSchema = z.object(itemAttributeEnums);
 export const itemAttributePatchSchema = itemAttributesSchema.partial();
 
 export type ItemAttributeValues = z.infer<typeof itemAttributesSchema>;
+export type ItemAttributePatchValues = z.infer<typeof itemAttributePatchSchema>;
 
 export const defaultItemAttributes: ItemAttributeValues = {
   colorFamily: "UNKNOWN",
@@ -72,4 +83,31 @@ export function formatEnumLabel(value: string) {
 
 export function hasUnknownAttributes(item: ItemAttributeValues) {
   return Object.values(item).some((value) => value === "UNKNOWN");
+}
+
+export function mergeItemAttributes(partial?: ItemAttributePatchValues): ItemAttributeValues {
+  return {
+    ...defaultItemAttributes,
+    ...(partial ?? {}),
+  };
+}
+
+export function countKnownAttributes(item: ItemAttributeValues) {
+  return Object.values(item).filter((value) => value !== "UNKNOWN").length;
+}
+
+export function pickProvidedItemAttributes(partial?: ItemAttributePatchValues) {
+  if (!partial) return {};
+
+  return Object.fromEntries(
+    Object.entries(partial).filter(([, value]) => value !== undefined),
+  ) as Partial<ItemAttributeValues>;
+}
+
+export function getDefaultSubtypeForKind(kind: ItemKindValue) {
+  return itemSubtypeOptions[kind][0];
+}
+
+export function isValidSubtypeForKind(kind: ItemKindValue, subtype: string): subtype is ItemSubtypeValue {
+  return (itemSubtypeOptions[kind] as readonly string[]).includes(subtype);
 }
