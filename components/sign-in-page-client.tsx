@@ -39,7 +39,7 @@ export default function SignInPageClient() {
         <EmailAuthForm mode="sign-in" nextPath={nextPath} onError={setError} />
 
         <p className="mt-4 text-sm muted-copy">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/sign-up" className="text-foreground underline">
             Sign up
           </Link>

@@ -249,6 +249,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isPublicAuthPage = pathname === "/sign-in" || pathname === "/sign-up";
   const showAppNav = !isPublicLanding && !isPublicAuthPage;
 
+  if (isPublicLanding) return <>{children}</>;
+
   return (
     <div className="page-shell">
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">

@@ -56,8 +56,9 @@ export function EmailAuthForm({ mode, nextPath, onError }: EmailAuthFormProps) {
           if (onError) onError("Check your email for the confirmation link.");
         }
       }
-    } catch (err: any) {
-      if (onError) onError(err.message || "An unexpected error occurred.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+      if (onError) onError(msg);
     } finally {
       setIsLoading(false);
     }
