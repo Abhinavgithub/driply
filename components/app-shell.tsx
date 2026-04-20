@@ -109,11 +109,23 @@ function pageMeta(pathname: string) {
     };
   }
 
+  if (pathname.startsWith("/profile")) {
+    return {
+      title: "Profile",
+      showHeading: true,
+    };
+  }
+
   return {
     title: "Home",
     showHeading: true,
   };
 }
+
+type AppProfile = {
+  avatarUrl: string | null;
+  displayName: string | null;
+};
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -121,6 +133,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const meta = useMemo(() => pageMeta(pathname), [pathname]);
   const [themePreference, setThemePreference] = useState<ThemePreference>(getStoredThemePreference);
   const [user, setUser] = useState<User | null>(null);
+  const [appProfile, setAppProfile] = useState<AppProfile | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -158,6 +171,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (active) {
         setUser(session?.user ?? null);
+        if (!session?.user) setAppProfile(null);
       }
     });
 
@@ -166,6 +180,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    void fetch("/api/profile")
+      .then((res) => res.json())
+      .then((json) => {
+        if (!active) return;
+        setAppProfile({
+          avatarUrl: json.avatarUrl ?? null,
+          displayName: json.displayName ?? null,
+        });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;
@@ -200,18 +230,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.refresh();
   }
 
-  const displayName =
+  const oauthDisplayName =
     typeof user?.user_metadata?.full_name === "string"
       ? user.user_metadata.full_name
       : typeof user?.user_metadata?.name === "string"
         ? user.user_metadata.name
         : user?.email ?? "Account";
-  const avatarUrl =
+  const displayName = appProfile?.displayName || oauthDisplayName;
+
+  const oauthAvatarUrl =
     typeof user?.user_metadata?.avatar_url === "string"
       ? user.user_metadata.avatar_url
       : typeof user?.user_metadata?.picture === "string"
         ? user.user_metadata.picture
         : null;
+  const avatarUrl = appProfile?.avatarUrl ?? oauthAvatarUrl;
   const isPublicLanding = pathname === "/";
   const isPublicAuthPage = pathname === "/sign-in" || pathname === "/sign-up";
   const showAppNav = !isPublicLanding && !isPublicAuthPage;
@@ -229,6 +262,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {[
                   { href: "/today", label: "Home" },
                   { href: "/library", label: "Wardrobe" },
+                  { href: "/profile", label: "Profile" },
                 ].map((item) => {
                   const active = pathname === item.href;
                   return (
@@ -299,6 +333,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="px-3 py-2">
                       <p className="text-sm font-semibold text-foreground">{displayName}</p>
                     </div>
+                    <Link
+                      href="/profile"
+                      onClick={() => setIsProfileMenuOpen(false)}
+                      className="profile-menu-action block"
+                      role="menuitem"
+                    >
+                      Profile
+                    </Link>
                     <button
                       type="button"
                       onClick={() => void onSignOut()}
@@ -310,11 +352,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
                 ) : null}
               </div>
-            ) : (
-              <Link href="/sign-in" className="text-sm text-foreground">
-                Log in
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </header>

@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.15",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.5.0",
     "@supabase/ssr": "^0.9.0",
