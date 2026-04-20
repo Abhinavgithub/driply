@@ -133,18 +133,20 @@ export function LandingPage() {
     <div className="lp" ref={containerRef}>
       {/* NAV */}
       <nav ref={navRef} className="lp-nav">
-        <Link href="/" className="lp-nav-logo">
-          drip<span>ly</span>
-        </Link>
-        <ul className="lp-nav-links">
-          <li><a href="#how">How it works</a></li>
-          <li><a href="#features">Features</a></li>
-          <li>
-            <Link href="/sign-up" className="lp-nav-cta">
-              Sign up free
-            </Link>
-          </li>
-        </ul>
+        <div className="lp-nav-inner">
+          <Link href="/" className="lp-nav-logo">
+            drip<span>ly</span>
+          </Link>
+          <ul className="lp-nav-links">
+            <li><a href="#how">How it works</a></li>
+            <li><a href="#features">Features</a></li>
+            <li>
+              <Link href="/sign-up" className="lp-nav-cta">
+                Get Started
+              </Link>
+            </li>
+          </ul>
+        </div>
       </nav>
 
       {/* HERO */}
@@ -163,7 +165,7 @@ export function LandingPage() {
           </p>
           <div className="lp-hero-actions lp-reveal lp-reveal-delay-3">
             <Link href="/sign-up" className="lp-btn-primary">
-              Get started free <ArrowIcon />
+              Get started <ArrowIcon />
             </Link>
             <a href="#how" className="lp-btn-secondary">
               See how it works <ArrowIcon />
@@ -280,6 +282,7 @@ export function LandingPage() {
 
       {/* FEATURES */}
       <section className="lp-features-section" id="features">
+        <div className="lp-features-inner">
         <div className="lp-features-header">
           <div>
             <div className="lp-section-tag lp-reveal">Features</div>
@@ -321,6 +324,7 @@ export function LandingPage() {
             </p>
           </div>
         </div>
+        </div>
       </section>
 
       {/* CTA */}
@@ -335,7 +339,7 @@ export function LandingPage() {
         </p>
         <div className="lp-cta-buttons lp-reveal lp-reveal-delay-3">
           <Link href="/sign-up" className="lp-btn-primary" style={{ fontSize: "16px", padding: "16px 36px" }}>
-            Sign up free <ArrowIcon />
+            Sign up <ArrowIcon />
           </Link>
           <Link href="/sign-in" className="lp-btn-secondary" style={{ fontSize: "16px" }}>
             Sign in <ArrowIcon />
@@ -344,6 +348,7 @@ export function LandingPage() {
       </section>
 
       {/* FOOTER */}
+      <div className="lp-footer-wrap">
       <footer className="lp-footer">
         <div className="lp-footer-logo">drip<span>ly</span></div>
         <p className="lp-footer-copy">© 2026 driply. Made with less.</p>
@@ -353,6 +358,7 @@ export function LandingPage() {
           <li><a href="#">Contact</a></li>
         </ul>
       </footer>
+      </div>
     </div>
   );
 }
