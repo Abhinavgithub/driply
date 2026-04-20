@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { TryOnPreview } from "@/components/tryon-preview";
 
 type Item = {
   id: string;
@@ -70,6 +71,11 @@ type SavedLocation = {
 type LocationResult = SavedLocation;
 
 type LocationSource = "device" | "saved" | "manual" | null;
+
+type UserProfile = {
+  displayName: string | null;
+  hasTryOnPhoto: boolean;
+};
 
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
 
@@ -244,6 +250,7 @@ export default function TodayPage() {
   const [searchResults, setSearchResults] = useState<LocationResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
   const pageLimit = 6;
   const localDateKey = useMemo(() => getLocalDateKey(), []);
@@ -345,6 +352,19 @@ export default function TodayPage() {
     if (!authReady) return;
     void loadInitialRecommendation();
   }, [authReady, loadInitialRecommendation]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    let active = true;
+    void fetch("/api/profile")
+      .then((r) => r.json())
+      .then((json) => {
+        if (!active) return;
+        setUserProfile({ displayName: json.displayName ?? null, hasTryOnPhoto: Boolean(json.hasTryOnPhoto) });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [authUserId]);
 
   useEffect(() => {
     setMarked(false);
@@ -628,6 +648,14 @@ export default function TodayPage() {
               </article>
             ))}
           </section>
+
+          {userProfile !== null ? (
+            <TryOnPreview
+              outfit={{ top: current.top, bottom: current.bottom, shoe: current.shoe }}
+              hasTryOnPhoto={userProfile.hasTryOnPhoto}
+              displayName={userProfile.displayName}
+            />
+          ) : null}
 
           <section className="app-card rounded-3xl p-4">
             <div className="space-y-4">

@@ -73,14 +73,18 @@ enum MetadataSource {
 }
 
 model User {
-  id        String         @id @db.Uuid
-  email     String?        @unique
-  name      String?
-  avatarUrl String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  items     Item[]
-  history   OutfitHistory[]
+  id                   String          @id @db.Uuid
+  email                String?         @unique
+  name                 String?
+  avatarUrl            String?
+  displayName          String?
+  uploadedAvatarUrl    String?
+  aiTryOnPhotoUrl      String?
+  aiTryOnPhotoMimeType String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  items                Item[]
+  history              OutfitHistory[]
 }
 
 model Item {
