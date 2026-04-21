@@ -438,36 +438,38 @@ export default function LibraryPage() {
         const isCollapsed = collapsedGroups.has(groupKind);
         return (
           <section key={groupKind} className="space-y-3">
-            <button
-              type="button"
-              aria-expanded={!isCollapsed}
-              aria-controls={`group-${groupKind}`}
-              onClick={() =>
-                setCollapsedGroups((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(groupKind)) next.delete(groupKind);
-                  else next.add(groupKind);
-                  return next;
-                })
-              }
-              className="app-card flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-            >
-              <div className="flex items-center gap-3">
-                <h3 className="text-sm font-semibold text-foreground">{kindLabel(groupKind)}</h3>
-                <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-xs font-medium muted-copy">
-                  {list.length}
-                </span>
-              </div>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                className={`muted-copy flex-shrink-0 transition-transform duration-200${isCollapsed ? "" : " rotate-180"}`}
+            <h3 className="m-0">
+              <button
+                type="button"
+                aria-expanded={!isCollapsed}
+                aria-controls={`group-${groupKind}`}
+                onClick={() =>
+                  setCollapsedGroups((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(groupKind)) next.delete(groupKind);
+                    else next.add(groupKind);
+                    return next;
+                  })
+                }
+                className="app-card flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
-                <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-foreground">{kindLabel(groupKind)}</span>
+                  <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-xs font-medium muted-copy">
+                    {list.length}
+                  </span>
+                </div>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  className={`muted-copy flex-shrink-0 transition-transform duration-200${isCollapsed ? "" : " rotate-180"}`}
+                >
+                  <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </h3>
 
             <div id={`group-${groupKind}`} hidden={isCollapsed} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((it) => {
