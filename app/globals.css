@@ -199,6 +199,85 @@ textarea {
   color: var(--danger);
 }
 
+/* ── Upload dropzone ── */
+.upload-dropzone {
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 1.25rem;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+  background: var(--surface-subtle);
+  min-height: 140px;
+  text-align: center;
+  user-select: none;
+}
+.upload-dropzone:hover,
+.upload-dropzone.drag-over {
+  border-color: var(--foreground);
+  background: var(--surface);
+}
+.upload-dropzone-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+.upload-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+.upload-preview-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+.upload-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.upload-preview-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--foreground);
+  color: var(--background);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  padding: 0;
+}
+.upload-preview-item:hover .upload-preview-remove {
+  opacity: 1;
+}
+
 .profile-menu {
   z-index: 30;
 }

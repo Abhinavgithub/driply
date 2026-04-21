@@ -264,33 +264,46 @@ async function generateStructuredJson<T>(args: {
     throw new GeminiApiError("Missing Gemini API key.", "MISSING_API_KEY");
   }
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: args.contents,
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseJsonSchema: args.responseJsonSchema,
-          temperature: 0.1,
-          topP: 0.1,
-          maxOutputTokens: args.task === "classification" ? 220 : 600,
-          thinkingConfig: {
-            thinkingBudget: 0,
-          },
-        },
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(args.timeoutMs),
-    },
-  );
+  const RATE_LIMIT_RETRY_DELAYS_MS = [800, 2000];
+  let lastError: GeminiApiError | undefined;
 
-  if (!response.ok) {
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_RETRY_DELAYS_MS[attempt - 1]));
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: args.contents,
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseJsonSchema: args.responseJsonSchema,
+            temperature: 0.1,
+            topP: 0.1,
+            maxOutputTokens: args.task === "classification" ? 220 : 600,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+          },
+        }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(args.timeoutMs),
+      },
+    );
+
+    if (response.ok) {
+      const json = (await response.json()) as GeminiApiResponse;
+      logUsage(args.task, args.model, json.usageMetadata);
+      return JSON.parse(getTextResponse(json, args.task)) as T;
+    }
+
     const code =
       response.status === 401 || response.status === 403
         ? "UNAUTHORIZED"
@@ -301,12 +314,13 @@ async function generateStructuredJson<T>(args: {
             : response.status >= 500
               ? "UPSTREAM_ERROR"
               : "BAD_REQUEST";
-    throw new GeminiApiError(`Gemini request failed with ${response.status}.`, code, response.status);
+    const err = new GeminiApiError(`Gemini request failed with ${response.status}.`, code, response.status);
+
+    if (code !== "RATE_LIMITED") throw err;
+    lastError = err;
   }
 
-  const json = (await response.json()) as GeminiApiResponse;
-  logUsage(args.task, args.model, json.usageMetadata);
-  return JSON.parse(getTextResponse(json, args.task)) as T;
+  throw lastError!
 }
 
 async function toGeminiThumbnail(imageBytes: Buffer) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { dateKeyToUtcStart } from "@/lib/date-utils";
 import { prisma } from "@/lib/prisma";
 
 const BodySchema = z.object({
@@ -11,9 +12,6 @@ const BodySchema = z.object({
   shoeItemId: z.string().min(1),
 });
 
-function dateKeyToUtcStart(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00.000Z`);
-}
 
 export async function POST(req: NextRequest) {
   const currentUser = await getCurrentUser();

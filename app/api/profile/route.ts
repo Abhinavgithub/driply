@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
 import {
   deleteProfilePhoto,
@@ -13,18 +14,6 @@ const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const DisplayNameSchema = z.string().trim().min(1).max(80);
 
-function mimeToExt(mimeType: string): string | null {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    default:
-      return null;
-  }
-}
 
 export async function GET() {
   const currentUser = await getCurrentUser();
@@ -97,16 +86,17 @@ export async function PATCH(req: NextRequest) {
     if (rawAvatar.size > MAX_PROFILE_PHOTO_BYTES) {
       return NextResponse.json({ error: "Avatar exceeds 10 MB limit." }, { status: 400 });
     }
-    const ext = mimeToExt(rawAvatar.type);
-    if (!ext) {
+    const bytes = await readBlobBytes(rawAvatar);
+    const avatarMime = validateImageMime(bytes, rawAvatar.type);
+    const ext = avatarMime ? mimeToExt(avatarMime) : null;
+    if (!ext || !avatarMime) {
       return NextResponse.json(
         { error: `Unsupported avatar type: ${rawAvatar.type || "unknown"}` },
         { status: 400 },
       );
     }
 
-    const bytes = Buffer.from(await rawAvatar.arrayBuffer());
-    const path = await uploadProfilePhoto({ userId, kind: "avatar", bytes, extension: ext, contentType: rawAvatar.type });
+    const path = await uploadProfilePhoto({ userId, kind: "avatar", bytes, extension: ext, contentType: avatarMime });
     updates.uploadedAvatarUrl = path;
 
     // Delete previous avatar only after successful upload of new one
@@ -120,24 +110,25 @@ export async function PATCH(req: NextRequest) {
     if (rawTryOnPhoto.size > MAX_PROFILE_PHOTO_BYTES) {
       return NextResponse.json({ error: "Try-on photo exceeds 10 MB limit." }, { status: 400 });
     }
-    const ext = mimeToExt(rawTryOnPhoto.type);
-    if (!ext) {
+    const bytes = await readBlobBytes(rawTryOnPhoto);
+    const tryOnMime = validateImageMime(bytes, rawTryOnPhoto.type);
+    const ext = tryOnMime ? mimeToExt(tryOnMime) : null;
+    if (!ext || !tryOnMime) {
       return NextResponse.json(
         { error: `Unsupported try-on photo type: ${rawTryOnPhoto.type || "unknown"}` },
         { status: 400 },
       );
     }
 
-    const bytes = Buffer.from(await rawTryOnPhoto.arrayBuffer());
     const path = await uploadProfilePhoto({
       userId,
       kind: "tryon",
       bytes,
       extension: ext,
-      contentType: rawTryOnPhoto.type,
+      contentType: tryOnMime,
     });
     updates.aiTryOnPhotoUrl = path;
-    updates.aiTryOnPhotoMimeType = rawTryOnPhoto.type;
+    updates.aiTryOnPhotoMimeType = tryOnMime;
 
     if (existingUser?.aiTryOnPhotoUrl && existingUser.aiTryOnPhotoUrl !== path) {
       await deleteProfilePhoto(existingUser.aiTryOnPhotoUrl);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   colorFamilies,
@@ -11,6 +11,7 @@ import {
   hasUnknownAttributes,
   itemKinds,
   itemSubtypeOptions,
+  MAX_UPLOAD_PHOTOS,
   patterns,
   styleProfiles,
   warmthLevels,
@@ -54,7 +55,7 @@ function StatusBadge({ tone, label }: { tone: "success" | "warning"; label: stri
 
 function getItemStatus(item: Item) {
   if (item.analysisStatus === "PENDING") {
-    return { tone: "warning" as const, label: "Analyzing" };
+    return { tone: "warning" as const, label: "Pending analysis" };
   }
   if (item.analysisStatus === "FAILED" || hasUnknownAttributes(item)) {
     return { tone: "warning" as const, label: "Needs review" };
@@ -69,19 +70,28 @@ function getItemStatus(item: Item) {
 }
 
 export default function LibraryPage() {
-  const MAX_UPLOAD_PHOTOS = 10;
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
   const [kind, setKind] = useState<Item["kind"]>("TOP");
   const [subtype, setSubtype] = useState<string>(getDefaultSubtypeForKind("TOP"));
   const [files, setFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [attributes, setAttributes] = useState<ItemAttributeValues>(makeAttributeState);
   const [showManualDetails, setShowManualDetails] = useState(false);
+
+  useEffect(() => {
+    const urls = files.map((f) => URL.createObjectURL(f));
+    setPreviewUrls(urls);
+    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [files]);
   const [editForm, setEditForm] = useState<{ kind: Item["kind"]; subtype: string } & ItemAttributeValues>({
     kind: "TOP",
     subtype: getDefaultSubtypeForKind("TOP"),
@@ -136,6 +146,17 @@ export default function LibraryPage() {
         </select>
       </label>
     );
+  }
+
+  function handleFileChange(incoming: File[]) {
+    const images = incoming.filter((f) => f.type.startsWith("image/"));
+    if (images.length > MAX_UPLOAD_PHOTOS) {
+      setError(`Max ${MAX_UPLOAD_PHOTOS} photos.`);
+      setFiles(images.slice(0, MAX_UPLOAD_PHOTOS));
+    } else {
+      setError(null);
+      setFiles(images);
+    }
   }
 
   async function refreshItems() {
@@ -207,6 +228,27 @@ export default function LibraryPage() {
     }
   }
 
+  async function onReanalyze(itemId: string) {
+    setError(null);
+    setAnalyzingId(itemId);
+    try {
+      const res = await fetch("/api/items/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itemId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Re-analysis failed");
+      if (json.ok && json.item) {
+        setItems((prev) => prev.map((i) => (i.id === itemId ? json.item : i)));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAnalyzingId(null);
+    }
+  }
+
   function beginEdit(item: Item) {
     setEditingId(item.id);
     setEditForm({
@@ -257,28 +299,62 @@ export default function LibraryPage() {
           </button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-1">
-          <label className="field-label">
-            <span>Photo</span>
-            <input
-              type="file"
-              accept="image/*"
-              required
-              multiple
-              onChange={(e) => {
-                const next = Array.from(e.target.files ?? []);
-                if (next.length > MAX_UPLOAD_PHOTOS) {
-                  setError(`Max ${MAX_UPLOAD_PHOTOS} photos.`);
-                  setFiles(next.slice(0, MAX_UPLOAD_PHOTOS));
-                  return;
-                }
-                setError(null);
-                setFiles(next);
-              }}
-              className="input-base pt-3"
-            />
-          </label>
+        <div
+          className={`upload-dropzone${dragOver ? " drag-over" : ""}`}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            handleFileChange(Array.from(e.dataTransfer.files));
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileChange(Array.from(e.target.files ?? []))}
+          />
+          <div className="upload-dropzone-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M9 12V4M9 4L6 7M9 4l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 14h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div>
+            <div className="text-sm font-medium text-foreground">
+              {files.length ? `${files.length} photo${files.length > 1 ? "s" : ""} selected` : "Drop photos here"}
+            </div>
+            <div className="text-xs muted-copy mt-0.5">
+              {files.length ? "Click to change selection" : `or click to browse · up to ${MAX_UPLOAD_PHOTOS} images`}
+            </div>
+          </div>
         </div>
+
+        {previewUrls.length > 0 && (
+          <div className="upload-preview-grid">
+            {previewUrls.map((url, i) => (
+              <div key={url} className="upload-preview-item">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={files[i]?.name ?? "preview"} />
+                <button
+                  type="button"
+                  className="upload-preview-remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFiles((prev) => prev.filter((_, idx) => idx !== i));
+                  }}
+                  aria-label="Remove photo"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-4 flex items-center justify-between gap-4">
           <div className="text-sm muted-copy">Optional details</div>
@@ -496,6 +572,16 @@ export default function LibraryPage() {
                               {deletingId === it.id ? "Removing..." : "Remove"}
                             </button>
                           </div>
+                          {it.analysisStatus === "PENDING" && (
+                            <button
+                              type="button"
+                              onClick={() => onReanalyze(it.id)}
+                              disabled={analyzingId === it.id}
+                              className="button-secondary w-full"
+                            >
+                              {analyzingId === it.id ? "Analyzing..." : "Re-analyze"}
+                            </button>
+                          )}
                         </>
                       )}
                     </div>

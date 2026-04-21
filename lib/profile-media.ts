@@ -44,10 +44,13 @@ export async function getSignedProfilePhotoUrl(path: string | null | undefined):
   return data.signedUrl;
 }
 
+const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
+
 export async function downloadStorageObject(path: string | null | undefined): Promise<Buffer | null> {
   if (!path) return null;
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.storage.from(getSupabaseStorageBucket()).download(path);
   if (error || !data) return null;
+  if (data.size > MAX_DOWNLOAD_BYTES) throw new Error("Storage object exceeds maximum download size.");
   return Buffer.from(await data.arrayBuffer());
 }
