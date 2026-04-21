@@ -440,6 +440,8 @@ export default function LibraryPage() {
           <section key={groupKind} className="space-y-3">
             <button
               type="button"
+              aria-expanded={!isCollapsed}
+              aria-controls={`group-${groupKind}`}
               onClick={() =>
                 setCollapsedGroups((prev) => {
                   const next = new Set(prev);
@@ -467,7 +469,7 @@ export default function LibraryPage() {
               </svg>
             </button>
 
-            {!isCollapsed && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {!isCollapsed && <div id={`group-${groupKind}`} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((it) => {
                 const isEditing = editingId === it.id;
                 const status = getItemStatus(it);
