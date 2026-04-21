@@ -77,6 +77,7 @@ export default function LibraryPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<Item["kind"]>>(new Set());
 
   const [kind, setKind] = useState<Item["kind"]>("TOP");
   const [subtype, setSubtype] = useState<string>(getDefaultSubtypeForKind("TOP"));
@@ -434,14 +435,39 @@ export default function LibraryPage() {
 
       {(["TOP", "BOTTOM", "SHOE"] as const).map((groupKind) => {
         const list = grouped[groupKind];
+        const isCollapsed = collapsedGroups.has(groupKind);
         return (
           <section key={groupKind} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-foreground">{kindLabel(groupKind)}</h3>
-              <span className="muted-copy text-sm">{list.length}</span>
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setCollapsedGroups((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(groupKind)) next.delete(groupKind);
+                  else next.add(groupKind);
+                  return next;
+                })
+              }
+              className="app-card flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            >
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-foreground">{kindLabel(groupKind)}</h3>
+                <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-xs font-medium muted-copy">
+                  {list.length}
+                </span>
+              </div>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                className={`muted-copy flex-shrink-0 transition-transform duration-200${isCollapsed ? "" : " rotate-180"}`}
+              >
+                <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {!isCollapsed && <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((it) => {
                 const isEditing = editingId === it.id;
                 const status = getItemStatus(it);
@@ -588,7 +614,7 @@ export default function LibraryPage() {
                   </article>
                 );
               })}
-            </div>
+            </div>}
           </section>
         );
       })}
