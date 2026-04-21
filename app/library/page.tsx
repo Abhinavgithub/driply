@@ -469,7 +469,7 @@ export default function LibraryPage() {
               </svg>
             </button>
 
-            {!isCollapsed && <div id={`group-${groupKind}`} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div id={`group-${groupKind}`} hidden={isCollapsed} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((it) => {
                 const isEditing = editingId === it.id;
                 const status = getItemStatus(it);
@@ -616,7 +616,7 @@ export default function LibraryPage() {
                   </article>
                 );
               })}
-            </div>}
+            </div>
           </section>
         );
       })}
