@@ -2,6 +2,7 @@ import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
+import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
 import {
   buildFallbackVisualSummary,
   classifyWardrobeImage,
@@ -14,10 +15,12 @@ import {
 } from "@/lib/gemini";
 import { deleteWardrobePhoto, attachSignedPhotoUrls, uploadWardrobePhoto } from "@/lib/item-media";
 import {
+  getDefaultSubtypeForKind,
   hasUnknownAttributes,
   isValidSubtypeForKind,
   itemKindSchema,
   itemAttributePatchSchema,
+  MAX_UPLOAD_PHOTOS,
   mergeItemAttributes,
   pickProvidedItemAttributes,
   type ItemKindValue,
@@ -46,7 +49,6 @@ const UpdateBodySchema = z
       value.warmthLevel !== undefined,
     { message: "Expected at least one editable field." },
   );
-const MAX_UPLOAD_PHOTOS = 10;
 const ITEM_ATTRIBUTE_KEYS = [
   "colorFamily",
   "pattern",
@@ -68,20 +70,6 @@ type UploadResolution = {
   attributes: ItemAttributeValues;
 };
 
-function mimeToExt(mimeType: string): string | null {
-  switch (mimeType) {
-    case "image/jpeg":
-      return "jpg";
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    case "image/gif":
-      return "gif";
-    default:
-      return null;
-  }
-}
 
 function mergeUnknownAttributes(
   currentAttributes: ItemAttributeValues,
@@ -233,7 +221,19 @@ async function resolveUploadMetadata(args: {
     });
 
     if (!manualKind || !manualSubtype) {
-      throw new Error("AI could not infer kind and subtype. Add them in optional details and try again.");
+      const pendingKind = "TOP" as const;
+      return {
+        kind: pendingKind,
+        subtype: getDefaultSubtypeForKind(pendingKind),
+        analysisStatus: "PENDING",
+        metadataSource: "MANUAL",
+        visualSummary: null,
+        analysisConfidence: null,
+        analysisModel: getClassifierModel(),
+        analysisPromptVersion: getClassifierPromptVersion(),
+        analysisErrorCode: getGeminiErrorCode(error),
+        attributes: manualAttributes,
+      } satisfies UploadResolution;
     }
 
     return {
@@ -338,16 +338,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const ext = mimeToExt(rawPhoto.type);
-    if (!ext) {
+    const itemId = crypto.randomUUID();
+    const bytes = await readBlobBytes(rawPhoto);
+
+    const verifiedMime = validateImageMime(bytes, rawPhoto.type);
+    const ext = verifiedMime ? mimeToExt(verifiedMime) : null;
+    if (!ext || !verifiedMime) {
       return NextResponse.json(
         { error: `Unsupported image type: ${rawPhoto.type || "unknown"}` },
         { status: 400 },
       );
     }
-
-    const itemId = crypto.randomUUID();
-    const bytes = Buffer.from(await rawPhoto.arrayBuffer());
 
     let photoPath = "";
     try {
@@ -356,7 +357,7 @@ export async function POST(req: NextRequest) {
         itemId,
         bytes,
         extension: ext,
-        contentType: rawPhoto.type,
+        contentType: verifiedMime,
       });
 
       const resolved = await resolveUploadMetadata({

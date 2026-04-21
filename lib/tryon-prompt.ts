@@ -22,7 +22,11 @@ export function buildTryOnPrompt(args: {
   displayName?: string | null;
   items: readonly TryOnPromptItem[];
 }): string {
-  const name = args.displayName?.trim() || "the person";
+  const name =
+    (args.displayName?.trim() || "the person")
+      .replace(/[^A-Za-z0-9 '\-.,]/g, "")
+      .slice(0, 40)
+      .trim() || "the person";
   const outfitDescription = buildItemDescriptions(args.items);
 
   return (

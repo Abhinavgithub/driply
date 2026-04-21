@@ -56,6 +56,14 @@ export async function uploadWardrobePhoto(args: {
   return path;
 }
 
+export async function downloadWardrobePhoto(path: string): Promise<Buffer | null> {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase.storage.from(getSupabaseStorageBucket()).download(path);
+  if (error || !data) return null;
+  if (data.size > 20 * 1024 * 1024) throw new Error("Photo exceeds download size limit.");
+  return Buffer.from(new Uint8Array(await data.arrayBuffer()));
+}
+
 export async function deleteWardrobePhoto(photoPath: string) {
   if (!photoPath) return;
 

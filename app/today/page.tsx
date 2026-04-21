@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
 import { TryOnPreview } from "@/components/tryon-preview";
+import { formatEnumLabel } from "@/lib/itemAttributes";
 
 type Item = {
   id: string;
@@ -79,13 +80,6 @@ type UserProfile = {
 
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
 
-function formatEnumLabel(value: string) {
-  return value
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function getLocalDateKey() {
   return new Date().toLocaleDateString("en-CA");

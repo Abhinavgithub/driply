@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { fetchWeather } from "@/lib/openMeteo";
+
+const QuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
+});
 
 export async function GET(req: NextRequest) {
   const currentUser = await getCurrentUser();
@@ -10,18 +16,19 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const latRaw = searchParams.get("lat");
-  const lonRaw = searchParams.get("lon");
+  const parsed = QuerySchema.safeParse({
+    lat: searchParams.get("lat"),
+    lon: searchParams.get("lon"),
+  });
 
-  const lat = latRaw ? Number(latRaw) : NaN;
-  const lon = lonRaw ? Number(lonRaw) : NaN;
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invalid lat/lon. Expected numbers." },
+      { error: "Invalid lat/lon. Expected numbers in range." },
       { status: 400 },
     );
   }
+
+  const { lat, lon } = parsed.data;
 
   try {
     return NextResponse.json(await fetchWeather(lat, lon));

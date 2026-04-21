@@ -3,14 +3,16 @@ import { z } from "zod";
 
 import { applyAiRecommendationRerank } from "@/lib/aiRecommendation";
 import { getCurrentUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
+import { getServerDateKey, dateKeyToUtcStart } from "@/lib/date-utils";
 
 const QuerySchema = z.object({
-  lat: z.coerce.number().finite(),
-  lon: z.coerce.number().finite(),
+  lat: z.coerce.number().min(-90).max(90),
+  lon: z.coerce.number().min(-180).max(180),
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -19,18 +21,14 @@ const QuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(12).default(6),
 });
 
-function getServerDateKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function dateKeyToUtcStart(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00.000Z`);
-}
 
 export async function GET(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (!checkRateLimit(currentUser.appUser.id, 20)) {
+    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
   }
 
   const { searchParams } = new URL(req.url);
@@ -52,13 +50,11 @@ export async function GET(req: NextRequest) {
   const { lat, lon, date, offset, limit } = parsed.data;
   const dateKey = date ?? getServerDateKey();
 
-  const items = await prisma.item.findMany({
-    where: { userId: currentUser.appUser.id },
-    orderBy: { createdAt: "desc" },
-  });
-  const tops = items.filter((i) => i.kind === "TOP");
-  const bottoms = items.filter((i) => i.kind === "BOTTOM");
-  const shoes = items.filter((i) => i.kind === "SHOE");
+  const [tops, bottoms, shoes] = await Promise.all([
+    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "TOP", analysisStatus: { not: "PENDING" } } }),
+    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "BOTTOM", analysisStatus: { not: "PENDING" } } }),
+    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "SHOE", analysisStatus: { not: "PENDING" } } }),
+  ]);
 
   if (!tops.length || !bottoms.length || !shoes.length) {
     return NextResponse.json(

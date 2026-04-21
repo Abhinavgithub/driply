@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MAX_UPLOAD_PHOTOS = 10;
+
 export const itemKinds = ["TOP", "BOTTOM", "SHOE"] as const;
 export const itemKindSchema = z.enum(itemKinds);
 export const colorFamilies = [
