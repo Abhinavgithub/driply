@@ -614,7 +614,7 @@ export default function TodayPage() {
         <section className="grid gap-4 md:grid-cols-3">
           {[0, 1, 2].map((index) => (
             <div key={index} className="app-card shimmer rounded-3xl">
-              <div className="h-72 bg-surface-subtle" />
+              <div className="h-52 bg-surface-subtle sm:h-64 md:h-72" />
             </div>
           ))}
         </section>
@@ -631,7 +631,7 @@ export default function TodayPage() {
                 <img
                   src={entry.item.photoUrl}
                   alt={entry.item.subtype}
-                  className="h-72 w-full object-cover"
+                  className="h-52 w-full object-cover sm:h-64 md:h-72"
                 />
                 <div className="space-y-2 p-4">
                   <div className="text-xs uppercase tracking-[0.12em] muted-copy">{entry.label}</div>

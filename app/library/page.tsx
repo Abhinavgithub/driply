@@ -482,7 +482,7 @@ export default function LibraryPage() {
                     <img
                       src={it.photoUrl}
                       alt={`${it.kind} ${it.subtype}`}
-                      className="h-64 w-full object-cover"
+                      className="h-48 w-full object-cover sm:h-56 md:h-64"
                     />
                     <div className="space-y-4 p-4">
                       <div className="flex items-start justify-between gap-3">
