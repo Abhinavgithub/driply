@@ -135,6 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [appProfile, setAppProfile] = useState<AppProfile | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -196,6 +197,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .catch(() => {});
     return () => { active = false; };
   }, [user]);
+
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;
@@ -260,7 +265,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               driply
             </Link>
             {showAppNav ? (
-              <nav className="flex items-center gap-2">
+              <nav className="hidden items-center gap-2 md:flex">
                 {[
                   { href: "/today", label: "Home" },
                   { href: "/library", label: "Wardrobe" },
@@ -285,7 +290,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <div className="app-card flex items-center gap-1 rounded-full p-1">
               {themeOptions.map((option) => {
                 const selected = themePreference === option;
@@ -296,7 +301,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     onClick={() => onThemeChange(option)}
                     aria-label={`${option} theme`}
                     aria-pressed={selected}
-                    className={`rounded-full p-2 transition ${
+                    className={`rounded-full p-2.5 transition ${
                       selected ? "bg-foreground text-background" : "text-muted-foreground"
                     }`}
                   >
@@ -306,6 +311,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               })}
             </div>
 
+            {showAppNav ? (
+              <button
+                type="button"
+                onClick={() => setIsMobileNavOpen((o) => !o)}
+                aria-label={isMobileNavOpen ? "Close menu" : "Open menu"}
+                aria-expanded={isMobileNavOpen}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition hover:text-foreground md:hidden"
+              >
+                {isMobileNavOpen ? (
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-5 w-5">
+                    <path d="M6 6l12 12M6 18L18 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className="h-5 w-5">
+                    <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
+            ) : null}
+
             {user ? (
               <div ref={profileMenuRef} className="relative">
                 <button
@@ -314,7 +339,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   aria-label="Open account menu"
                   aria-expanded={isProfileMenuOpen}
                   aria-haspopup="menu"
-                  className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-border bg-surface"
+                  className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-border bg-surface"
                 >
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -357,6 +382,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
           </div>
         </div>
+        {showAppNav && isMobileNavOpen ? (
+          <div className="border-t border-border bg-background/95 px-4 py-3 md:hidden">
+            <nav className="flex flex-col gap-1">
+              {[
+                { href: "/today", label: "Home" },
+                { href: "/library", label: "Wardrobe" },
+                { href: "/profile", label: "Profile" },
+              ].map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`block w-full rounded-xl px-4 py-3 text-sm font-medium transition ${
+                      active
+                        ? "bg-foreground text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">

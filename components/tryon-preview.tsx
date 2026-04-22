@@ -182,7 +182,7 @@ export function TryOnPreview({ outfit, hasTryOnPhoto, displayName }: TryOnPrevie
   if (phase === "loading") {
     return (
       <section className="app-card overflow-hidden rounded-3xl">
-        <div className="shimmer h-[420px] bg-surface-subtle" />
+        <div className="shimmer h-[280px] bg-surface-subtle sm:h-[360px] md:h-[420px]" />
         <div className="p-4">
           <p className="text-sm muted-copy">Generating your look…</p>
         </div>
