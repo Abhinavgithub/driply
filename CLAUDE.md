@@ -32,7 +32,8 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `lib/auth.ts` — `getCurrentUser()` (checks Supabase session + syncs Prisma user); all API routes call this and return 401 if missing. `syncAuthUser` only syncs OAuth fields (`name`, `avatarUrl`, `email`) — never overwrites `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`.
 - `lib/gemini.ts` — image classification + outfit re-ranking via Gemini text/JSON; gracefully degrades if unavailable
 - `lib/gemini-tryon.ts` — try-on image generation via `gemini-2.5-flash-preview-image-generation`; multimodal request (try-on photo + clothing images + prompt); returns `{ imageBase64, mimeType }` or throws `TryOnApiError`
-- `lib/tryon-prompt.ts` — `buildTryOnPrompt()` utility; takes item metadata and displayName, returns the Gemini image generation prompt string
+- `lib/openai-tryon.ts` — try-on image generation via OpenAI `gpt-image-2` (`/v1/images/edits`); same multimodal pattern as Gemini (user photo + clothing images); uses `openai` npm SDK + `toFile()` helper
+- `lib/tryon-prompt.ts` — prompt builders for try-on providers: `buildTryOnPrompt()` / `buildOpenAITryOnPrompt()` (multimodal, Gemini + OpenAI) and `buildFluxTryOnPrompt()` (text-only)
 - `lib/recommendation.ts` — deterministic outfit scoring (weather 45%, color 20%, style 15%, formality 10%, pattern 5%, warmth 5%)
 - `lib/aiRecommendation.ts` — optional Gemini re-ranking on top of deterministic scores
 - `lib/prisma.ts` — singleton Prisma client with `@prisma/adapter-pg`
@@ -51,7 +52,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 **AI features** (all optional, toggled by env vars):
 - `ENABLE_AI_CLASSIFICATION` — runs Gemini on uploaded photos to populate item attributes; uploads still succeed if this fails
 - `ENABLE_AI_RECOMMENDER` — re-ranks deterministic outfit candidates with Gemini before returning results
-- `ENABLE_AI_TRYON` — generates a try-on image via `gemini-2.5-flash-preview-image-generation` using the user's AI try-on photo + item photos; silently falls back to normal recommendation display on any failure
+- `ENABLE_AI_TRYON` — generates a try-on image using the selected provider (`TRYON_PROVIDER`); Gemini and OpenAI are multimodal (require user's AI try-on photo); FLUX is text-only; silently falls back to normal recommendation display on any failure
 
 ## Environment variables
 
@@ -69,9 +70,11 @@ GEMINI_RECOMMENDER_MODEL=gemini-2.5-flash-lite
 ENABLE_AI_CLASSIFICATION=true
 ENABLE_AI_RECOMMENDER=true
 ENABLE_AI_TRYON=true
-TRYON_PROVIDER=gemini        # "gemini" (default) or "flux"
+TRYON_PROVIDER=gemini        # "gemini" (default), "flux", or "openai"
 GEMINI_TRYON_MODEL=gemini-2.5-flash-image
 HF_TOKEN=                    # required when TRYON_PROVIDER=flux
+OPENAI_API_KEY=              # required when TRYON_PROVIDER=openai
+OPENAI_TRYON_MODEL=gpt-image-2  # default; override to pin a snapshot
 ```
 
 Configure Google OAuth in Supabase with redirect URL `http://localhost:3000/auth/callback`.

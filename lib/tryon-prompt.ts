@@ -30,16 +30,27 @@ export function buildTryOnPrompt(args: {
   const outfitDescription = buildItemDescriptions(args.items);
 
   return (
-    `Create a realistic fashion try-on image of ${name} wearing the provided clothing items. ` +
-    `The first uploaded image is the full-body reference photo — use it as the identity and body reference. ` +
-    `The remaining uploaded images are the clothing items — use them for outfit accuracy. ` +
+    `Generate a high-fashion editorial portrait of ${name} wearing the provided clothing items. ` +
+    `The first uploaded image is the full-body reference photo — use it as the sole identity reference: ` +
+    `the generated face, skin tone, facial features, body shape, and proportions MUST match this person exactly. ` +
+    `The remaining uploaded images are the clothing items — use them for precise garment accuracy. ` +
     `The outfit consists of: ${outfitDescription}. ` +
-    `Preserve the person's identity, face, and body shape while generating a polished, photorealistic outfit preview. ` +
-    `Show the full body from head to toe so the complete outfit is clearly visible. ` +
-    `Reproduce garment colors accurately, maintain realistic fabric drape and natural body proportions. ` +
-    `Use soft, even natural lighting. Place the subject against a clean, neutral light background. ` +
-    `Output a full-body portrait image in portrait orientation (taller than wide).`
+    `Preserve the person's identity, face, and body shape — this is critical: the result must be ` +
+    `photorealistic and unmistakably recognisable as the same individual from the reference photo. ` +
+    `Style: editorial high-fashion photography — confident full-body pose, dynamic cinematic lighting ` +
+    `with directional shadows and subtle contrast, magazine-quality composition. ` +
+    `Setting: moody urban environment or sleek minimalist studio with a textured backdrop. ` +
+    `Show the full body head to toe. Garments rendered with crisp fabric detail, accurate colors, and natural drape. ` +
+    `Portrait orientation, magazine cover quality.`
   );
+}
+
+// For OpenAI gpt-image-2 — multimodal, same structure as Gemini prompt
+export function buildOpenAITryOnPrompt(args: {
+  displayName?: string | null;
+  items: readonly TryOnPromptItem[];
+}): string {
+  return buildTryOnPrompt(args);
 }
 
 // For FLUX — text-only prompt, no reference images

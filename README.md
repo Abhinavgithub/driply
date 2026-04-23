@@ -58,9 +58,10 @@ The top candidates are then optionally passed to Gemini, which selects the best 
 
 ### Try-On Preview (`ENABLE_AI_TRYON`)
 
-Generates a photorealistic image of the user wearing the recommended outfit. Two providers:
+Generates a photorealistic image of the user wearing the recommended outfit. Three providers:
 
 - **`gemini`** (default): multimodal image generation — takes the user's full-body reference photo plus the three clothing item photos and composites them. Requires the user to upload a try-on photo in their profile.
+- **`openai`**: OpenAI `gpt-image-2` via `/v1/images/edits` — same multimodal approach as Gemini (reference photo + clothing item images). Requires `OPENAI_API_KEY` and a try-on photo in profile.
 - **`flux`**: HuggingFace FLUX.1-schnell text-to-image — purely synthetic, no reference photo needed. Requires `HF_TOKEN`.
 
 Rate-limited to 10 requests per minute per user. Silently skipped if no try-on photo is on file.
@@ -132,9 +133,11 @@ ENABLE_AI_CLASSIFICATION=true
 ENABLE_AI_RECOMMENDER=true
 ENABLE_AI_TRYON=true
 
-# Try-on provider: "gemini" (default) or "flux"
+# Try-on provider: "gemini" (default), "openai", or "flux"
 TRYON_PROVIDER=gemini
 HF_TOKEN=              # Required when TRYON_PROVIDER=flux
+OPENAI_API_KEY=        # Required when TRYON_PROVIDER=openai
+OPENAI_TRYON_MODEL=gpt-image-2  # Default; override to pin a snapshot
 ```
 
 ## Supabase Setup

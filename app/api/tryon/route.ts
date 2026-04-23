@@ -5,9 +5,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { generateTryOnImage, isAiTryOnEnabled, normalizeTryOnErrorCode } from "@/lib/gemini-tryon";
 import { generateFluxTryOnImage, getTryOnProvider, isFluxTryOnEnabled } from "@/lib/flux-tryon";
+import { generateOpenAITryOnImage, isOpenAITryOnEnabled } from "@/lib/openai-tryon";
 import { prisma } from "@/lib/prisma";
 import { downloadStorageObject } from "@/lib/profile-media";
-import { buildFluxTryOnPrompt, buildTryOnPrompt } from "@/lib/tryon-prompt";
+import { buildFluxTryOnPrompt, buildOpenAITryOnPrompt, buildTryOnPrompt } from "@/lib/tryon-prompt";
 
 const RequestSchema = z.object({
   topItemId: z.string().min(1),
@@ -27,7 +28,10 @@ export async function POST(req: NextRequest) {
 
   const provider = getTryOnProvider();
 
-  const enabled = provider === "flux" ? isFluxTryOnEnabled() : isAiTryOnEnabled();
+  const enabled =
+    provider === "flux"   ? isFluxTryOnEnabled()   :
+    provider === "openai" ? isOpenAITryOnEnabled()  :
+                            isAiTryOnEnabled();
   if (!enabled) {
     return NextResponse.json({ ok: false, reason: "tryon_disabled" });
   }
@@ -45,8 +49,8 @@ export async function POST(req: NextRequest) {
     select: { displayName: true, aiTryOnPhotoUrl: true },
   });
 
-  // FLUX is text-only — no reference photo needed. Gemini requires it.
-  if (provider === "gemini" && !userRecord?.aiTryOnPhotoUrl) {
+  // FLUX is text-only — no reference photo needed. Gemini and OpenAI require it.
+  if ((provider === "gemini" || provider === "openai") && !userRecord?.aiTryOnPhotoUrl) {
     return NextResponse.json({ ok: false, reason: "no_try_on_photo" });
   }
 
@@ -89,6 +93,32 @@ export async function POST(req: NextRequest) {
       const prompt = buildFluxTryOnPrompt({ items: itemMeta });
       const result = await generateFluxTryOnImage({ prompt });
       return NextResponse.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType, provider: "flux" });
+    }
+
+    // OpenAI gpt-image-2 — download reference photo + clothing images
+    if (provider === "openai") {
+      const [tryOnPhotoBytes, topBytes, bottomBytes, shoeBytes] = await Promise.all([
+        downloadStorageObject(userRecord!.aiTryOnPhotoUrl),
+        downloadStorageObject(top.photoUrl),
+        downloadStorageObject(bottom.photoUrl),
+        downloadStorageObject(shoe.photoUrl),
+      ]);
+
+      if (!tryOnPhotoBytes) {
+        return NextResponse.json({ ok: false, reason: "try_on_photo_unavailable" });
+      }
+
+      const clothingImages = [topBytes, bottomBytes, shoeBytes]
+        .filter((b): b is Buffer => b !== null)
+        .map((bytes) => ({ bytes }));
+
+      if (clothingImages.length === 0) {
+        return NextResponse.json({ ok: false, reason: "clothing_images_unavailable" });
+      }
+
+      const prompt = buildOpenAITryOnPrompt({ displayName: userRecord!.displayName, items: itemMeta });
+      const result = await generateOpenAITryOnImage({ tryOnPhotoBytes, clothingImages, prompt });
+      return NextResponse.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType, provider: "openai" });
     }
 
     // Gemini — download reference photo + clothing images

@@ -9,11 +9,13 @@ const FLUX_TIMEOUT_MS = 60000;
 
 export type { TryOnResult };
 
-export type TryOnProvider = "gemini" | "flux";
+export type TryOnProvider = "gemini" | "flux" | "openai";
 
 export function getTryOnProvider(): TryOnProvider {
   const raw = process.env.TRYON_PROVIDER?.trim().toLowerCase();
-  return raw === "flux" ? "flux" : "gemini";
+  if (raw === "flux") return "flux";
+  if (raw === "openai") return "openai";
+  return "gemini";
 }
 
 function isEnabledFlag(value: string | undefined): boolean {
