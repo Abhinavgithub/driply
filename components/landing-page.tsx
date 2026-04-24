@@ -144,7 +144,7 @@ export function LandingPage() {
   return (
     <div className="lp" ref={containerRef}>
       {/* NAV */}
-      <nav ref={navRef} className="lp-nav">
+      <nav ref={navRef} className={`lp-nav${isMobileMenuOpen ? " menu-open" : ""}`}>
         <div className="lp-nav-inner">
           <Link href="/" className="lp-nav-logo">
             drip<span>ly</span>

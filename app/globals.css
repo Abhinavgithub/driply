@@ -378,9 +378,13 @@ textarea {
 .lp-nav {
   position: fixed;
   top: 0; left: 0; right: 0;
-  z-index: 100;
+  z-index: 200;
   border-bottom: 1px solid transparent;
   transition: border-color 0.3s, background 0.3s, backdrop-filter 0.3s;
+}
+.lp-nav.menu-open {
+  background: var(--lp-bg);
+  border-color: var(--lp-border);
 }
 .lp-nav-inner {
   max-width: 1200px;
