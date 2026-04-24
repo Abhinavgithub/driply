@@ -254,7 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isPublicAuthPage = pathname === "/sign-in" || pathname === "/sign-up";
   const showAppNav = !isPublicLanding && !isPublicAuthPage;
 
-  if (isPublicLanding) return <>{children}</>;
+  if (isPublicLanding || isPublicAuthPage) return <>{children}</>;
 
   return (
     <div className="page-shell">
