@@ -437,10 +437,10 @@ textarea {
 .lp-nav-cta:hover { opacity: 0.88; transform: translateY(-1px); }
 .lp-nav-cta.lp-nav-cta-secondary {
   background: transparent !important;
-  color: var(--lp-text) !important;
-  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--lp-accent) !important;
+  border: 1px solid var(--lp-accent2);
 }
-.lp-nav-cta.lp-nav-cta-secondary:hover { opacity: 0.75; border-color: rgba(255,255,255,0.35); }
+.lp-nav-cta.lp-nav-cta-secondary:hover { opacity: 0.75; border-color: var(--lp-accent); }
 
 /* HERO */
 .lp-hero {
