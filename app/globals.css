@@ -549,6 +549,23 @@ textarea {
 .lp-btn-secondary:hover { opacity: 0.8; border-color: oklch(75% 0.18 200 / 0.6); }
 .lp-btn-secondary svg { transition: transform 0.2s; }
 .lp-btn-secondary:hover svg { transform: translateX(3px); }
+.lp-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lp-text-dim);
+  font-family: var(--lp-font-display, 'Space Grotesk', sans-serif);
+  font-weight: 500;
+  font-size: 15px;
+  text-decoration: none;
+  padding: 14px 24px;
+  border: 1px solid var(--lp-border);
+  border-radius: 100px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.lp-btn-ghost:hover { color: var(--lp-text); border-color: oklch(40% 0.01 240); }
+.lp-btn-ghost svg { transition: transform 0.2s; }
+.lp-btn-ghost:hover svg { transform: translateX(3px); }
 
 /* OUTFIT CARD */
 .lp-hero-visual {
@@ -1100,6 +1117,7 @@ textarea {
   .lp-hero-actions { flex-direction: column; align-items: flex-start; gap: 12px; }
   .lp-btn-primary { width: 100%; justify-content: center; padding: 16px 28px; font-size: 15px; }
   .lp-btn-secondary { padding: 14px 24px; width: 100%; justify-content: center; }
+  .lp-btn-ghost { padding: 14px 24px; width: 100%; justify-content: center; }
 
   /* OUTFIT CARD — show on mobile */
   .lp-hero-visual { display: flex; justify-content: center; }

@@ -208,7 +208,7 @@ export function LandingPage() {
             <Link href="/sign-up" className="lp-btn-primary">
               Get started <ArrowIcon />
             </Link>
-            <a href="#how" className="lp-btn-secondary">
+            <a href="#how" className="lp-btn-ghost">
               See how it works <ArrowIcon />
             </a>
           </div>
