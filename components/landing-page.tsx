@@ -82,6 +82,7 @@ function StarIcon() {
 
 export function LandingPage() {
   const [currentOutfit, setCurrentOutfit] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -127,6 +128,17 @@ export function LandingPage() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setIsMobileMenuOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isMobileMenuOpen]);
+
   const outfit = outfits[currentOutfit];
 
   return (
@@ -151,8 +163,32 @@ export function LandingPage() {
               </Link>
             </li>
           </ul>
+          <button
+            type="button"
+            className={`lp-hamburger${isMobileMenuOpen ? " open" : ""}`}
+            onClick={() => setIsMobileMenuOpen((o) => !o)}
+            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={isMobileMenuOpen}
+          >
+            <span /><span /><span />
+          </button>
         </div>
       </nav>
+
+      {isMobileMenuOpen && (
+        <div className="lp-mobile-menu">
+          <Link href="/" className="lp-mobile-menu-logo" onClick={() => setIsMobileMenuOpen(false)}>
+            drip<span>ly</span>
+          </Link>
+          <a href="#how" className="lp-mobile-menu-link" onClick={() => setIsMobileMenuOpen(false)}>How it works</a>
+          <a href="#features" className="lp-mobile-menu-link" onClick={() => setIsMobileMenuOpen(false)}>Features</a>
+          <div className="lp-mobile-divider" />
+          <div className="lp-mobile-cta-group">
+            <Link href="/sign-in" className="lp-mobile-btn-signin" onClick={() => setIsMobileMenuOpen(false)}>Open wardrobe</Link>
+            <Link href="/sign-up" className="lp-mobile-btn-primary" onClick={() => setIsMobileMenuOpen(false)}>Get started</Link>
+          </div>
+        </div>
+      )}
 
       {/* HERO */}
       <section className="lp-hero">
