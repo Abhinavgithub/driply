@@ -142,7 +142,7 @@ export function LandingPage() {
             <li><a href="#features">Features</a></li>
             <li>
               <Link href="/sign-up" className="lp-nav-cta">
-                Get Started
+                Open wardrobe
               </Link>
             </li>
           </ul>
@@ -219,13 +219,13 @@ export function LandingPage() {
               <div className="lp-float-badge-icon">✦</div>
               <div>
                 <div className="lp-float-badge-text">AI matched</div>
-                <div className="lp-float-badge-sub">color harmony</div>
+                <div className="lp-float-badge-sub">Color Harmony</div>
               </div>
             </div>
 
             <div className="lp-float-badge2">
               <StarIcon />
-              Weather-ready
+              Weather ready
             </div>
           </div>
         </div>
