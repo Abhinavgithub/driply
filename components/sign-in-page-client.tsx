@@ -95,7 +95,7 @@ export default function SignInPageClient() {
             </div>
 
             <div className="lp-auth-forgot">
-              <a href="#">Forgot password?</a>
+              <Link href="/forgot-password">Forgot password?</Link>
             </div>
 
             <button

@@ -1227,6 +1227,45 @@ textarea {
 }
 .lp-auth-footer-text a:hover { opacity: 0.8; }
 
+/* Password strength bar */
+.lp-auth-strength-bar {
+  height: 3px;
+  border-radius: 100px;
+  background: var(--lp-border);
+  overflow: hidden;
+  margin-top: -4px;
+}
+.lp-auth-strength-fill {
+  height: 100%;
+  border-radius: 100px;
+  width: 0%;
+  transition: width 0.3s, background 0.3s;
+}
+
+/* Terms text */
+.lp-auth-terms {
+  font-size: 12px;
+  color: var(--lp-muted);
+  line-height: 1.5;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.lp-auth-terms a {
+  color: var(--lp-text-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+.lp-auth-terms a:hover { color: var(--lp-accent); }
+
+/* Success message (forgot password sent state) */
+.lp-auth-success-msg {
+  font-size: 13px;
+  color: oklch(75% 0.18 200);
+  margin-top: -4px;
+  line-height: 1.5;
+}
+
 @media (max-width: 480px) {
   .lp-auth-nav { padding: 16px 20px; }
   .lp-auth-card { padding: 28px 24px; border-radius: 20px; }
