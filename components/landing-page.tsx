@@ -141,8 +141,13 @@ export function LandingPage() {
             <li><a href="#how">How it works</a></li>
             <li><a href="#features">Features</a></li>
             <li>
-              <Link href="/sign-up" className="lp-nav-cta">
+              <Link href="/sign-in" className="lp-nav-cta lp-nav-cta-secondary">
                 Open wardrobe
+              </Link>
+            </li>
+            <li>
+              <Link href="/sign-up" className="lp-nav-cta">
+                Get started
               </Link>
             </li>
           </ul>
