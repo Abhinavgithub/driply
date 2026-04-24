@@ -251,10 +251,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         : null;
   const avatarUrl = appProfile?.avatarUrl ?? oauthAvatarUrl;
   const isPublicLanding = pathname === "/";
-  const isPublicAuthPage = pathname === "/sign-in" || pathname === "/sign-up";
+  const isPublicAuthPage =
+    pathname === "/sign-in" ||
+    pathname === "/sign-up" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password";
   const showAppNav = !isPublicLanding && !isPublicAuthPage;
 
-  if (isPublicLanding) return <>{children}</>;
+  if (isPublicLanding || isPublicAuthPage) return <>{children}</>;
 
   return (
     <div className="page-shell">
