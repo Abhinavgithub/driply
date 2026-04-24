@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+
+type SessionState = "loading" | "valid" | "invalid";
 
 function getStrength(val: string): { pct: number; color: string } {
   let score = 0;
@@ -21,12 +23,20 @@ function getStrength(val: string): { pct: number; color: string } {
 }
 
 export default function ResetPasswordPageClient() {
+  const [sessionState, setSessionState] = useState<SessionState>("loading");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const strength = getStrength(password);
+
+  useEffect(() => {
+    getBrowserSupabaseClient()
+      .auth.getUser()
+      .then(({ data }) => setSessionState(data.user ? "valid" : "invalid"))
+      .catch(() => setSessionState("invalid"));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,7 +84,20 @@ export default function ResetPasswordPageClient() {
             <p className="lp-auth-sub">Choose a strong password for your driply account.</p>
           </div>
 
-          {done ? (
+          {sessionState === "loading" ? null : sessionState === "invalid" ? (
+            <>
+              <p className="lp-auth-error-msg" style={{ marginBottom: "24px", fontSize: "14px" }}>
+                This link has expired or is invalid. Please request a new one.
+              </p>
+              <Link
+                href="/forgot-password"
+                className="lp-auth-primary-btn"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+              >
+                Request new link
+              </Link>
+            </>
+          ) : done ? (
             <>
               <p className="lp-auth-success-msg" style={{ marginBottom: "24px" }}>
                 Password updated. You can now sign in with your new password.
@@ -125,6 +148,7 @@ export default function ResetPasswordPageClient() {
             </form>
           )}
         </div>
+
       </main>
     </div>
   );
