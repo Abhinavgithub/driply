@@ -1,5 +1,7 @@
 import sharp from "sharp";
 
+import { getConfig } from "@/lib/appConfig";
+
 const DEFAULT_TRYON_MODEL = "gemini-2.5-flash-image";
 const TRYON_TIMEOUT_MS = 45000;
 const MAX_TRYON_PHOTO_DIMENSION = 768;
@@ -44,12 +46,12 @@ function isEnabledFlag(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-export function isAiTryOnEnabled(): boolean {
-  return isEnabledFlag(process.env.ENABLE_AI_TRYON) && Boolean(process.env.GEMINI_API_KEY?.trim());
+export async function isAiTryOnEnabled(): Promise<boolean> {
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
-export function getTryOnModel(): string {
-  return process.env.GEMINI_TRYON_MODEL?.trim() || DEFAULT_TRYON_MODEL;
+export async function getTryOnModel(): Promise<string> {
+  return (await getConfig("GEMINI_TRYON_MODEL"))?.trim() || DEFAULT_TRYON_MODEL;
 }
 
 export function normalizeTryOnErrorCode(error: unknown): string {
@@ -83,7 +85,7 @@ export async function generateTryOnImage(args: {
     throw new TryOnApiError("Missing Gemini API key.", "MISSING_API_KEY");
   }
 
-  const model = getTryOnModel();
+  const model = await getTryOnModel();
 
   const [tryOnBase64, ...clothingBase64List] = await Promise.all([
     resizeToJpeg(args.tryOnPhotoBytes, MAX_TRYON_PHOTO_DIMENSION),

@@ -1,5 +1,7 @@
 import { InferenceClient } from "@huggingface/inference";
 
+import { getConfig } from "@/lib/appConfig";
+
 import { TryOnApiError } from "@/lib/gemini-tryon";
 import type { TryOnResult } from "@/lib/gemini-tryon";
 
@@ -11,8 +13,8 @@ export type { TryOnResult };
 
 export type TryOnProvider = "gemini" | "flux" | "openai";
 
-export function getTryOnProvider(): TryOnProvider {
-  const raw = process.env.TRYON_PROVIDER?.trim().toLowerCase();
+export async function getTryOnProvider(): Promise<TryOnProvider> {
+  const raw = (await getConfig("TRYON_PROVIDER"))?.trim().toLowerCase();
   if (raw === "flux") return "flux";
   if (raw === "openai") return "openai";
   return "gemini";
@@ -23,8 +25,8 @@ function isEnabledFlag(value: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-export function isFluxTryOnEnabled(): boolean {
-  return isEnabledFlag(process.env.ENABLE_AI_TRYON) && Boolean(process.env.HF_TOKEN?.trim());
+export async function isFluxTryOnEnabled(): Promise<boolean> {
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.HF_TOKEN?.trim());
 }
 
 export async function generateFluxTryOnImage(args: { prompt: string }): Promise<TryOnResult> {

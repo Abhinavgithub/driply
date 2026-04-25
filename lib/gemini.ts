@@ -2,6 +2,8 @@ import sharp from "sharp";
 import type { ColorFamily, Formality, Pattern, StyleProfile, WarmthLevel } from "@prisma/client";
 import { z } from "zod";
 
+import { getConfig } from "@/lib/appConfig";
+
 import {
   colorFamilies,
   formalities,
@@ -126,32 +128,32 @@ function getGeminiApiKey() {
   return process.env.GEMINI_API_KEY?.trim() || "";
 }
 
-export function isAiClassificationEnabled() {
-  return isEnabledFlag(process.env.ENABLE_AI_CLASSIFICATION) && Boolean(getGeminiApiKey());
+export async function isAiClassificationEnabled() {
+  return isEnabledFlag(await getConfig("ENABLE_AI_CLASSIFICATION")) && Boolean(getGeminiApiKey());
 }
 
-export function isAiRecommenderEnabled() {
-  return isEnabledFlag(process.env.ENABLE_AI_RECOMMENDER) && Boolean(getGeminiApiKey());
+export async function isAiRecommenderEnabled() {
+  return isEnabledFlag(await getConfig("ENABLE_AI_RECOMMENDER")) && Boolean(getGeminiApiKey());
 }
 
-export function getAiClassificationDisabledReason() {
-  if (!isEnabledFlag(process.env.ENABLE_AI_CLASSIFICATION)) return "ENABLE_AI_CLASSIFICATION is not enabled";
+export async function getAiClassificationDisabledReason() {
+  if (!isEnabledFlag(await getConfig("ENABLE_AI_CLASSIFICATION"))) return "ENABLE_AI_CLASSIFICATION is not enabled";
   if (!getGeminiApiKey()) return "GEMINI_API_KEY is missing";
   return null;
 }
 
-export function getAiRecommenderDisabledReason() {
-  if (!isEnabledFlag(process.env.ENABLE_AI_RECOMMENDER)) return "ENABLE_AI_RECOMMENDER is not enabled";
+export async function getAiRecommenderDisabledReason() {
+  if (!isEnabledFlag(await getConfig("ENABLE_AI_RECOMMENDER"))) return "ENABLE_AI_RECOMMENDER is not enabled";
   if (!getGeminiApiKey()) return "GEMINI_API_KEY is missing";
   return null;
 }
 
-export function getClassifierModel() {
-  return process.env.GEMINI_CLASSIFIER_MODEL?.trim() || DEFAULT_CLASSIFIER_MODEL;
+export async function getClassifierModel() {
+  return (await getConfig("GEMINI_CLASSIFIER_MODEL"))?.trim() || DEFAULT_CLASSIFIER_MODEL;
 }
 
-export function getRecommenderModel() {
-  return process.env.GEMINI_RECOMMENDER_MODEL?.trim() || DEFAULT_RECOMMENDER_MODEL;
+export async function getRecommenderModel() {
+  return (await getConfig("GEMINI_RECOMMENDER_MODEL"))?.trim() || DEFAULT_RECOMMENDER_MODEL;
 }
 
 export function getClassifierPromptVersion() {
@@ -346,7 +348,7 @@ export async function classifyWardrobeImage(args: {
   manualKind?: ItemKindValue | null;
   manualSubtype?: string | null;
 }) {
-  const model = getClassifierModel();
+  const model = await getClassifierModel();
   const thumbnail = await toGeminiThumbnail(args.imageBytes);
 
   const json = await generateStructuredJson<z.infer<typeof classifierResponseSchema>>({
@@ -433,7 +435,7 @@ export async function rerankOutfitCandidates(args: {
   };
   candidates: RerankCandidate[];
 }) {
-  const model = getRecommenderModel();
+  const model = await getRecommenderModel();
 
   const json = await generateStructuredJson<z.infer<typeof rerankResponseSchema>>({
     model,
@@ -456,7 +458,7 @@ export async function rerankOutfitCandidates(args: {
         },
         reason: {
           type: "string",
-          description: "Short explanation, 1 sentence.",
+          description: "Why this outfit works, written in a fun Gen-Z tone. 1 sentence, casual and punchy.",
         },
         confidence: { type: "number" },
       },
@@ -469,6 +471,7 @@ export async function rerankOutfitCandidates(args: {
             text:
               "Choose the best outfit candidate for today. " +
               "Priority order: weather fit first, then cohesive style/color/formality, then avoid recently worn pieces. " +
+              "Write the reason in a fun, confident Gen-Z tone — casual, punchy, 1 sentence, no cringe. Think how a stylish friend texts, not a fashion magazine. No hashtags. " +
               "Output ONLY valid JSON matching the schema \u2014 no markdown, no explanation, no extra text. " +
               "Return the full ordered list of all provided candidates. " +
               `Example: ${JSON.stringify({
@@ -478,7 +481,7 @@ export async function rerankOutfitCandidates(args: {
                   args.candidates[1]?.candidateId || "ID_2",
                   args.candidates[2]?.candidateId || "ID_3",
                 ],
-                reason: "Best weather fit with cohesive style.",
+                reason: "This fit is giving effortless — the colors just work and it's lowkey perfect for the weather.",
                 confidence: 0.85,
               })}`,
           },

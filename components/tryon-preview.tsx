@@ -134,6 +134,11 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
       }
     }, [outfit]);
 
+    const regenerate = useCallback(() => {
+      sessionCache.delete(makeCacheKey(outfit));
+      void generate();
+    }, [outfit, generate]);
+
     useImperativeHandle(ref, () => ({ generate: () => void generate() }), [generate]);
 
     function onDownload() {
@@ -158,29 +163,32 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
 
       if (phase === "success" && imageBase64) {
         return (
-          <div className="relative bg-surface-subtle border-t border-border">
+          <div className="border-t border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={`data:${imageMimeType};base64,${imageBase64}`}
               alt={title}
-              className="mx-auto max-h-[480px] w-full object-contain"
+              className="mx-auto max-h-[480px] w-full object-contain bg-surface-subtle"
             />
-            <div className="absolute bottom-3 right-3 flex gap-2">
+            <div
+              className="flex items-center justify-between px-4 py-3"
+              style={{ background: "rgba(0,0,0,0.82)" }}
+            >
               <button
                 type="button"
-                onClick={() => void generate()}
-                className="button-secondary flex items-center gap-1.5 text-xs px-3 py-1.5"
-                style={{ borderRadius: 100 }}
+                onClick={regenerate}
+                className="flex items-center gap-1.5 text-xs font-semibold"
+                style={{ color: "oklch(75% 0.18 200)" }}
               >
                 <RefreshIcon /> Regenerate
               </button>
               <button
                 type="button"
                 onClick={onDownload}
-                className="button-ghost flex items-center gap-1.5 text-xs px-3 py-1.5"
-                style={{ borderRadius: 100 }}
+                className="flex items-center gap-1.5 text-xs font-bold px-4 py-1.5"
+                style={{ background: "oklch(75% 0.18 200)", color: "oklch(9% 0.008 240)", borderRadius: 999 }}
               >
-                <DownloadIcon /> Save
+                <DownloadIcon /> Save look
               </button>
             </div>
           </div>
@@ -192,7 +200,7 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
           <div className="border-t border-border px-5 py-4">
             <p className="text-xs muted-copy">{fallbackNote ?? "Couldn't generate your look right now."}</p>
             {canRetry ? (
-              <button type="button" onClick={() => void generate()} className="button-ghost text-xs mt-2">
+              <button type="button" onClick={regenerate} className="button-ghost text-xs mt-2">
                 Try again
               </button>
             ) : null}
@@ -304,34 +312,32 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
     if (phase === "success" && imageBase64) {
       return (
         <section className="app-card overflow-hidden rounded-3xl">
-          <div className="relative bg-surface-subtle">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`data:${imageMimeType};base64,${imageBase64}`}
-              alt={title}
-              className="mx-auto max-h-[520px] w-full object-contain"
-            />
-          </div>
-          <div className="space-y-3 p-4">
-            <p className="text-sm font-medium text-foreground">{title}</p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => void generate()}
-                className="button-secondary flex w-full items-center justify-center gap-2"
-              >
-                <RefreshIcon />
-                Regenerate
-              </button>
-              <button
-                type="button"
-                onClick={onDownload}
-                className="button-ghost flex w-full items-center justify-center gap-2"
-              >
-                <DownloadIcon />
-                Save image
-              </button>
-            </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`data:${imageMimeType};base64,${imageBase64}`}
+            alt={title}
+            className="mx-auto max-h-[520px] w-full object-contain bg-surface-subtle"
+          />
+          <div
+            className="flex items-center justify-between px-4 py-3"
+            style={{ background: "rgba(0,0,0,0.82)" }}
+          >
+            <button
+              type="button"
+              onClick={regenerate}
+              className="flex items-center gap-1.5 text-xs font-semibold"
+              style={{ color: "rgba(255,255,255,0.65)" }}
+            >
+              <RefreshIcon /> Regenerate
+            </button>
+            <button
+              type="button"
+              onClick={onDownload}
+              className="flex items-center gap-1.5 text-xs font-bold px-4 py-1.5"
+              style={{ background: "oklch(75% 0.18 200)", color: "oklch(9% 0.008 240)", borderRadius: 999 }}
+            >
+              <DownloadIcon /> Save look
+            </button>
           </div>
         </section>
       );
@@ -347,7 +353,7 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
           {canRetry ? (
             <button
               type="button"
-              onClick={() => void generate()}
+              onClick={regenerate}
               className="button-ghost text-sm"
             >
               Try again

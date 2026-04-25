@@ -2,6 +2,7 @@ import OpenAI, { toFile } from "openai";
 import sharp from "sharp";
 
 import { TryOnApiError, type TryOnResult } from "@/lib/gemini-tryon";
+import { getConfig } from "@/lib/appConfig";
 
 const DEFAULT_MODEL = "gpt-image-2";
 const TRYON_TIMEOUT_MS = 120000; // gpt-image-2 with 4 input images can take 60-90s
@@ -12,8 +13,8 @@ function isEnabledFlag(v: string | undefined): boolean {
   return ["1", "true", "yes", "on"].includes(v?.trim().toLowerCase() ?? "");
 }
 
-export function isOpenAITryOnEnabled(): boolean {
-  return isEnabledFlag(process.env.ENABLE_AI_TRYON) && Boolean(process.env.OPENAI_API_KEY?.trim());
+export async function isOpenAITryOnEnabled(): Promise<boolean> {
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
 export function getOpenAITryOnModel(): string {

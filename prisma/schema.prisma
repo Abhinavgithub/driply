@@ -124,3 +124,11 @@ model OutfitHistory {
 
   @@index([userId, date])
 }
+
+model AppConfig {
+  key            String   @id
+  value          String
+  description    String?
+  possibleValues String?
+  updatedAt      DateTime @updatedAt
+}
