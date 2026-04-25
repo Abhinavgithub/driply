@@ -518,6 +518,7 @@ export default function TodayPage() {
   }
 
   async function onShowAnother() {
+    if (loading) return;
     const nextIndex = selectedIndex + 1;
     if (nextIndex < options.length) {
       setSelectedIndex(nextIndex);

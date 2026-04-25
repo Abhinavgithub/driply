@@ -19,6 +19,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
   const cacheKey = `${lat.toFixed(2)}_${lon.toFixed(2)}`;
   const cached = weatherCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.result;
+  if (cached) weatherCache.delete(cacheKey); // evict expired entry
 
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", lat.toString());
