@@ -95,6 +95,12 @@ export default function OnboardingPage() {
   const shoeInputRef = useRef<HTMLInputElement>(null);
   const tryOnInputRef = useRef<HTMLInputElement>(null);
 
+  // Refs that always hold the latest blob URLs so unmount cleanup can revoke them
+  const previewsRef = useRef(previews);
+  const tryOnPreviewRef = useRef(tryOnPreview);
+  useEffect(() => { previewsRef.current = previews; }, [previews]);
+  useEffect(() => { tryOnPreviewRef.current = tryOnPreview; }, [tryOnPreview]);
+
   const inputRefMap: Record<ItemKind, React.RefObject<HTMLInputElement | null>> = {
     TOP: topInputRef,
     BOTTOM: bottomInputRef,
@@ -126,13 +132,12 @@ export default function OnboardingPage() {
     })();
   }, []);
 
-  // Revoke all blob URLs on unmount to prevent memory leaks
+  // Revoke all blob URLs on unmount — reads from refs to get current URLs, not stale closure values
   useEffect(() => {
     return () => {
-      Object.values(previews).forEach((url) => { if (url) URL.revokeObjectURL(url); });
-      if (tryOnPreview) URL.revokeObjectURL(tryOnPreview);
+      Object.values(previewsRef.current).forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      if (tryOnPreviewRef.current) URL.revokeObjectURL(tryOnPreviewRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function onItemFileSelected(kind: ItemKind, file: File) {
