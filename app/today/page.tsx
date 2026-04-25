@@ -1,15 +1,18 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 
-import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
-import { TryOnPreview, type TryOnPreviewHandle } from "@/components/tryon-preview";
-import { formatEnumLabel } from "@/lib/itemAttributes";
+import { getBrowserSupabaseClient } from '@/lib/supabase/browser';
+import {
+  TryOnPreview,
+  type TryOnPreviewHandle,
+} from '@/components/tryon-preview';
+import { formatEnumLabel } from '@/lib/itemAttributes';
 
 type Item = {
   id: string;
-  kind: "TOP" | "BOTTOM" | "SHOE";
+  kind: 'TOP' | 'BOTTOM' | 'SHOE';
   subtype: string;
   photoUrl: string;
   visualSummary: string | null;
@@ -25,7 +28,7 @@ type RecommendationOption = {
   bottom: Item;
   shoe: Item;
   explanation: string;
-  decisionSource: "ai" | "algorithm_fallback";
+  decisionSource: 'ai' | 'algorithm_fallback';
   decisionConfidence: number | null;
   aiReason: string | null;
   totalScore: number;
@@ -51,7 +54,7 @@ type RecommendationOptionsResponse = {
   options: RecommendationOption[];
   offset: number;
   limit: number;
-  decisionSource: "ai" | "algorithm_fallback";
+  decisionSource: 'ai' | 'algorithm_fallback';
   decisionConfidence: number | null;
   aiReason: string | null;
 };
@@ -71,7 +74,7 @@ type SavedLocation = {
 
 type LocationResult = SavedLocation;
 
-type LocationSource = "device" | "saved" | "manual" | null;
+type LocationSource = 'device' | 'saved' | 'manual' | null;
 
 type UserProfile = {
   displayName: string | null;
@@ -81,38 +84,69 @@ type UserProfile = {
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
 
 const COLOR_SWATCHES: Record<string, string> = {
-  WHITE: "#f0ece4", BLACK: "#1a1a1a", GRAY: "#8a8a8a",
-  NAVY: "#1a2d5a", BLUE: "#3a6eb5", LIGHT_BLUE: "#8abbe0",
-  DENIM: "#4a6fa5", RED: "#c0392b", PINK: "#e8a0b0",
-  ORANGE: "#e87722", YELLOW: "#f5c842", GREEN: "#2d7d46",
-  OLIVE: "#6b7c3d", KHAKI: "#c4b490", BROWN: "#7d5a3c",
-  BEIGE: "#e8d8c0", CREAM: "#f5edd5", PURPLE: "#7b5ca8",
-  MAROON: "#7d2038",
+  WHITE: '#f0ece4',
+  BLACK: '#1a1a1a',
+  GRAY: '#8a8a8a',
+  NAVY: '#1a2d5a',
+  BLUE: '#3a6eb5',
+  LIGHT_BLUE: '#8abbe0',
+  DENIM: '#4a6fa5',
+  RED: '#c0392b',
+  PINK: '#e8a0b0',
+  ORANGE: '#e87722',
+  YELLOW: '#f5c842',
+  GREEN: '#2d7d46',
+  OLIVE: '#6b7c3d',
+  KHAKI: '#c4b490',
+  BROWN: '#7d5a3c',
+  BEIGE: '#e8d8c0',
+  CREAM: '#f5edd5',
+  PURPLE: '#7b5ca8',
+  MAROON: '#7d2038',
 };
 
-function getMoodConfig(tempC: number, isRaining: boolean) {
-  if (isRaining) return {
-    gradient: "linear-gradient(135deg, oklch(24% 0.10 280) 0%, oklch(16% 0.08 300) 50%, oklch(10% 0.04 270) 100%)",
-    glow: "radial-gradient(ellipse 65% 70% at 20% 60%, oklch(38% 0.16 285 / 0.60) 0%, transparent 70%)",
-    particleColor: "oklch(78% 0.06 280)",
-    desc: "Rainy",
-  };
-  if (tempC < 16) return {
-    gradient: "linear-gradient(135deg, oklch(45% 0.18 245) 0%, oklch(32% 0.20 235) 55%, oklch(15% 0.06 240) 100%)",
-    glow: "radial-gradient(ellipse 60% 80% at 20% 60%, oklch(62% 0.22 240 / 0.50) 0%, transparent 70%)",
-    particleColor: "oklch(82% 0.18 235)",
-    desc: "Cool",
-  };
+function getMoodConfig(
+  tempC: number,
+  isRaining: boolean,
+  hour = new Date().getHours(),
+) {
+  const isNight = hour >= 20 || hour < 6;
+
+  if (isRaining)
+    return {
+      gradient:
+        'linear-gradient(135deg, oklch(24% 0.10 280) 0%, oklch(16% 0.08 300) 50%, oklch(10% 0.04 270) 100%)',
+      glow: 'radial-gradient(ellipse 65% 70% at 20% 60%, oklch(38% 0.16 285 / 0.60) 0%, transparent 70%)',
+      particleColor: 'oklch(78% 0.06 280)',
+      desc: 'Rainy',
+    };
+  if (isNight)
+    return {
+      gradient:
+        'linear-gradient(135deg, oklch(18% 0.08 260) 0%, oklch(12% 0.06 280) 55%, oklch(8% 0.03 270) 100%)',
+      glow: 'radial-gradient(ellipse 50% 60% at 75% 25%, oklch(55% 0.10 240 / 0.35) 0%, transparent 65%)',
+      particleColor: 'oklch(75% 0.06 240)',
+      desc: 'Clear night',
+    };
+  if (tempC < 16)
+    return {
+      gradient:
+        'linear-gradient(135deg, oklch(45% 0.18 245) 0%, oklch(32% 0.20 235) 55%, oklch(15% 0.06 240) 100%)',
+      glow: 'radial-gradient(ellipse 60% 80% at 20% 60%, oklch(62% 0.22 240 / 0.50) 0%, transparent 70%)',
+      particleColor: 'oklch(82% 0.18 235)',
+      desc: 'Cool',
+    };
   return {
-    gradient: "linear-gradient(135deg, oklch(52% 0.16 60) 0%, oklch(38% 0.18 200) 55%, oklch(18% 0.06 240) 100%)",
-    glow: "radial-gradient(ellipse 60% 80% at 20% 60%, oklch(70% 0.20 60 / 0.45) 0%, transparent 70%), radial-gradient(ellipse 50% 70% at 75% 30%, oklch(65% 0.20 200 / 0.35) 0%, transparent 65%)",
-    particleColor: "oklch(85% 0.18 65)",
-    desc: "Sunny",
+    gradient:
+      'linear-gradient(135deg, oklch(52% 0.16 60) 0%, oklch(38% 0.18 200) 55%, oklch(18% 0.06 240) 100%)',
+    glow: 'radial-gradient(ellipse 60% 80% at 20% 60%, oklch(70% 0.20 60 / 0.45) 0%, transparent 70%), radial-gradient(ellipse 50% 70% at 75% 30%, oklch(65% 0.20 200 / 0.35) 0%, transparent 65%)',
+    particleColor: 'oklch(85% 0.18 65)',
+    desc: 'Sunny',
   };
 }
 
 function getLocalDateKey() {
-  return new Date().toLocaleDateString("en-CA");
+  return new Date().toLocaleDateString('en-CA');
 }
 
 function sleep(ms: number) {
@@ -122,24 +156,26 @@ function sleep(ms: number) {
 function getGeolocationErrorMessage(error: GeolocationPositionError) {
   switch (error.code) {
     case error.PERMISSION_DENIED:
-      return "Location blocked.";
+      return 'Location blocked.';
     case error.POSITION_UNAVAILABLE:
-      return "Location unavailable.";
+      return 'Location unavailable.';
     case error.TIMEOUT:
-      return "Location timed out.";
+      return 'Location timed out.';
     default:
-      return error.message || "Location failed.";
+      return error.message || 'Location failed.';
   }
 }
 
-function isGeolocationPositionError(error: unknown): error is GeolocationPositionError {
+function isGeolocationPositionError(
+  error: unknown,
+): error is GeolocationPositionError {
   return (
-    typeof error === "object" &&
+    typeof error === 'object' &&
     error !== null &&
-    "code" in error &&
-    typeof error.code === "number" &&
-    "message" in error &&
-    typeof error.message === "string"
+    'code' in error &&
+    typeof error.code === 'number' &&
+    'message' in error &&
+    typeof error.message === 'string'
   );
 }
 
@@ -147,20 +183,20 @@ function isRetryableGeolocationError(error: GeolocationPositionError) {
   return (
     error.code === error.POSITION_UNAVAILABLE ||
     error.code === error.TIMEOUT ||
-    error.message.toLowerCase().includes("locationunknown")
+    error.message.toLowerCase().includes('locationunknown')
   );
 }
 
 function getSavedLocation(savedLocationKey: string): SavedLocation | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(savedLocationKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SavedLocation;
     if (
-      typeof parsed.name === "string" &&
-      typeof parsed.latitude === "number" &&
-      typeof parsed.longitude === "number"
+      typeof parsed.name === 'string' &&
+      typeof parsed.latitude === 'number' &&
+      typeof parsed.longitude === 'number'
     ) {
       return parsed;
     }
@@ -170,8 +206,11 @@ function getSavedLocation(savedLocationKey: string): SavedLocation | null {
   }
 }
 
-function setSavedLocation(savedLocationKey: string, next: SavedLocation | null) {
-  if (typeof window === "undefined") return;
+function setSavedLocation(
+  savedLocationKey: string,
+  next: SavedLocation | null,
+) {
+  if (typeof window === 'undefined') return;
   if (!next) {
     window.localStorage.removeItem(savedLocationKey);
     return;
@@ -180,12 +219,14 @@ function setSavedLocation(savedLocationKey: string, next: SavedLocation | null) 
 }
 
 function formatLocationLabel(location: SavedLocation) {
-  return [location.name, location.admin1, location.country].filter(Boolean).join(", ");
+  return [location.name, location.admin1, location.country]
+    .filter(Boolean)
+    .join(', ');
 }
 
 async function getGeolocationAttempt(): Promise<Coordinates> {
-  if (!("geolocation" in navigator)) {
-    throw new Error("Geolocation not supported.");
+  if (!('geolocation' in navigator)) {
+    throw new Error('Geolocation not supported.');
   }
   return await new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -198,14 +239,23 @@ async function getGeolocationAttempt(): Promise<Coordinates> {
 
 async function getGeolocationWithRetry(): Promise<Coordinates> {
   let lastError: unknown;
-  for (let attempt = 0; attempt <= GEOLOCATION_RETRY_DELAYS_MS.length; attempt++) {
+  for (
+    let attempt = 0;
+    attempt <= GEOLOCATION_RETRY_DELAYS_MS.length;
+    attempt++
+  ) {
     try {
       return await getGeolocationAttempt();
     } catch (error) {
       lastError = error;
-      if (!isGeolocationPositionError(error) || !isRetryableGeolocationError(error)) {
+      if (
+        !isGeolocationPositionError(error) ||
+        !isRetryableGeolocationError(error)
+      ) {
         throw new Error(
-          isGeolocationPositionError(error) ? getGeolocationErrorMessage(error) : String(error),
+          isGeolocationPositionError(error)
+            ? getGeolocationErrorMessage(error)
+            : String(error),
         );
       }
       if (attempt === GEOLOCATION_RETRY_DELAYS_MS.length) break;
@@ -215,7 +265,7 @@ async function getGeolocationWithRetry(): Promise<Coordinates> {
   if (isGeolocationPositionError(lastError)) {
     throw new Error(getGeolocationErrorMessage(lastError));
   }
-  throw new Error("Location failed.");
+  throw new Error('Location failed.');
 }
 
 async function fetchRecommendationPage(args: {
@@ -233,9 +283,11 @@ async function fetchRecommendationPage(args: {
 }
 
 async function searchManualLocations(query: string) {
-  const res = await fetch(`/api/location-search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(
+    `/api/location-search?q=${encodeURIComponent(query)}`,
+  );
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Location search failed.");
+  if (!res.ok) throw new Error(json?.error || 'Location search failed.');
   return (json.results ?? []) as LocationResult[];
 }
 
@@ -249,12 +301,20 @@ export default function TodayPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [coords, setCoords] = useState<Coordinates | null>(null);
   const [marked, setMarked] = useState(false);
-  const [needs, setNeeds] = useState<{ top: boolean; bottom: boolean; shoe: boolean } | null>(null);
+  const [needs, setNeeds] = useState<{
+    top: boolean;
+    bottom: boolean;
+    shoe: boolean;
+  } | null>(null);
   const [cursor, setCursor] = useState(0);
   const [locationSource, setLocationSource] = useState<LocationSource>(null);
-  const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null);
-  const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(
+    null,
+  );
+  const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(
+    null,
+  );
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<LocationResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -264,8 +324,10 @@ export default function TodayPage() {
   const [wornDateKeys, setWornDateKeys] = useState<Set<string>>(new Set());
   const [scoreDisplay, setScoreDisplay] = useState(0);
   const [scoreAnimated, setScoreAnimated] = useState(false);
-  const [chatText, setChatText] = useState("");
-  const [chatPhase, setChatPhase] = useState<"dots" | "typing" | "done">("dots");
+  const [chatText, setChatText] = useState('');
+  const [chatPhase, setChatPhase] = useState<'dots' | 'typing' | 'done'>(
+    'dots',
+  );
 
   const particlesRef = useRef<HTMLDivElement | null>(null);
   const gradientRef = useRef<HTMLDivElement | null>(null);
@@ -277,28 +339,43 @@ export default function TodayPage() {
   const pageLimit = 6;
   const localDateKey = useMemo(() => getLocalDateKey(), []);
   const localDateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
+    return new Date().toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
     });
   }, []);
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
   const current = options[selectedIndex] ?? null;
-  const savedLocationKey = authUserId ? `driply-saved-location:${authUserId}` : null;
+  const savedLocationKey = authUserId
+    ? `driply-saved-location:${authUserId}`
+    : null;
 
   // Week history derived state
   const weekDays = useMemo(() => {
     const today = new Date();
-    const todayKey = today.toLocaleDateString("en-CA");
+    const todayKey = today.toLocaleDateString('en-CA');
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(today);
       d.setDate(today.getDate() - 6 + i);
-      const key = d.toLocaleDateString("en-CA");
+      const key = d.toLocaleDateString('en-CA');
       const isPast = key < todayKey;
       return {
         key,
-        label: d.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3),
-        state: key === todayKey ? "today" : wornDateKeys.has(key) ? "worn" : isPast ? "missed" : "future",
+        label: d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3),
+        state:
+          key === todayKey
+            ? 'today'
+            : wornDateKeys.has(key)
+              ? 'worn'
+              : isPast
+                ? 'missed'
+                : 'future',
       };
     });
   }, [wornDateKeys]);
@@ -309,7 +386,7 @@ export default function TodayPage() {
     for (let i = 0; i <= 30; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      if (!wornDateKeys.has(d.toLocaleDateString("en-CA"))) break;
+      if (!wornDateKeys.has(d.toLocaleDateString('en-CA'))) break;
       count++;
     }
     return count;
@@ -324,7 +401,7 @@ export default function TodayPage() {
 
   // Auth
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === 'undefined') return;
     const supabase = getBrowserSupabaseClient();
     let active = true;
     void supabase.auth.getUser().then(({ data }) => {
@@ -332,7 +409,9 @@ export default function TodayPage() {
       setAuthUserId(data.user?.id ?? null);
       setAuthReady(true);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       setAuthUserId(session?.user?.id ?? null);
       setAuthReady(true);
@@ -347,11 +426,14 @@ export default function TodayPage() {
   useEffect(() => {
     if (!authUserId) return;
     let active = true;
-    void fetch("/api/profile")
+    void fetch('/api/profile')
       .then((r) => r.json())
       .then((json) => {
         if (!active) return;
-        setUserProfile({ displayName: json.displayName ?? null, hasTryOnPhoto: Boolean(json.hasTryOnPhoto) });
+        setUserProfile({
+          displayName: json.displayName ?? null,
+          hasTryOnPhoto: Boolean(json.hasTryOnPhoto),
+        });
       })
       .catch(() => {});
     void fetch(`/api/outfits?date=${localDateKey}`)
@@ -361,7 +443,9 @@ export default function TodayPage() {
         setWornDateKeys(new Set((json.dateKeys ?? []) as string[]));
       })
       .catch(() => {});
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [authUserId]);
 
   // Score ring animation
@@ -386,19 +470,19 @@ export default function TodayPage() {
   // Chat typewriter effect
   useEffect(() => {
     if (!current) return;
-    setChatText("");
-    setChatPhase("dots");
+    setChatText('');
+    setChatPhase('dots');
     const message = current.aiReason ?? current.explanation;
     let cleanupInterval: ReturnType<typeof setInterval> | null = null;
     const timeout = setTimeout(() => {
-      setChatPhase("typing");
+      setChatPhase('typing');
       let i = 0;
       cleanupInterval = setInterval(() => {
         i++;
         setChatText(message.slice(0, i));
         if (i >= message.length) {
           if (cleanupInterval) clearInterval(cleanupInterval);
-          setChatPhase("done");
+          setChatPhase('done');
         }
       }, 22);
     }, 1600);
@@ -410,22 +494,35 @@ export default function TodayPage() {
 
   // Mood banner particles
   useEffect(() => {
-    if (!current || !particlesRef.current || !gradientRef.current || !glowRef.current) return;
-    const mood = getMoodConfig(current.debugScores.temperatureC, current.debugScores.isRaining);
+    if (
+      !current ||
+      !particlesRef.current ||
+      !gradientRef.current ||
+      !glowRef.current
+    )
+      return;
+    const mood = getMoodConfig(
+      current.debugScores.temperatureC,
+      current.debugScores.isRaining,
+    );
     gradientRef.current.style.background = mood.gradient;
     glowRef.current.style.background = mood.glow;
     const container = particlesRef.current;
-    container.innerHTML = "";
+    container.innerHTML = '';
     for (let i = 0; i < 14; i++) {
-      const p = document.createElement("div");
-      p.className = "mood-particle";
-      p.style.cssText = `left:${Math.random()*100}%;bottom:${Math.random()*40}%;width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;background:${mood.particleColor};--dur:${3+Math.random()*4}s;--delay:${Math.random()*4}s;`;
+      const p = document.createElement('div');
+      p.className = 'mood-particle';
+      p.style.cssText = `left:${Math.random() * 100}%;bottom:${Math.random() * 40}%;width:${4 + Math.random() * 6}px;height:${4 + Math.random() * 6}px;background:${mood.particleColor};--dur:${3 + Math.random() * 4}s;--delay:${Math.random() * 4}s;`;
       container.appendChild(p);
     }
   }, [current]);
 
   const loadRecommendationsForCoordinates = useCallback(
-    async (nextCoords: Coordinates, source: LocationSource, locationLabel?: string) => {
+    async (
+      nextCoords: Coordinates,
+      source: LocationSource,
+      locationLabel?: string,
+    ) => {
       setCoords(nextCoords);
       setLocationSource(source);
       setActiveLocationLabel(locationLabel ?? null);
@@ -437,7 +534,7 @@ export default function TodayPage() {
       });
       if (!res.ok) {
         if (json?.needs) setNeeds(json.needs);
-        throw new Error(json?.error || "Recommendation failed.");
+        throw new Error(json?.error || 'Recommendation failed.');
       }
       const data = json as RecommendationOptionsResponse;
       setOptions(data.options ?? []);
@@ -460,9 +557,10 @@ export default function TodayPage() {
 
     setLoading(true);
     try {
-      const nextCoords = await (pendingGeoRef.current ?? getGeolocationWithRetry());
+      const nextCoords = await (pendingGeoRef.current ??
+        getGeolocationWithRetry());
       pendingGeoRef.current = null;
-      await loadRecommendationsForCoordinates(nextCoords, "device");
+      await loadRecommendationsForCoordinates(nextCoords, 'device');
     } catch (e) {
       pendingGeoRef.current = null; // clear so "Retry device" calls geolocation fresh
       const message = e instanceof Error ? e.message : String(e);
@@ -471,13 +569,17 @@ export default function TodayPage() {
         try {
           await loadRecommendationsForCoordinates(
             { lat: storedLocation.latitude, lon: storedLocation.longitude },
-            "saved",
+            'saved',
             formatLocationLabel(storedLocation),
           );
           setLoading(false);
           return;
         } catch (fallbackError) {
-          setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
+          setError(
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError),
+          );
         }
       }
     } finally {
@@ -498,9 +600,9 @@ export default function TodayPage() {
     if (!current) return;
     setError(null);
     try {
-      const res = await fetch("/api/outfits", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
+      const res = await fetch('/api/outfits', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           dateKey: localDateKey,
           topItemId: current.top.id,
@@ -509,7 +611,7 @@ export default function TodayPage() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Save failed.");
+      if (!res.ok) throw new Error(json?.error || 'Save failed.');
       setMarked(true);
       setWornDateKeys((prev) => new Set([...prev, localDateKey]));
     } catch (e) {
@@ -535,7 +637,7 @@ export default function TodayPage() {
         offset: cursor,
         limit: pageLimit,
       });
-      if (!res.ok) throw new Error(json?.error || "Load failed.");
+      if (!res.ok) throw new Error(json?.error || 'Load failed.');
       const data = json as RecommendationOptionsResponse;
       if (!data.options?.length) return;
       setOptions((prev) => [...prev, ...data.options]);
@@ -551,7 +653,7 @@ export default function TodayPage() {
   async function onSearchLocation() {
     const trimmed = searchQuery.trim();
     if (!trimmed) {
-      setSearchError("Enter a city.");
+      setSearchError('Enter a city.');
       setSearchResults([]);
       return;
     }
@@ -560,7 +662,7 @@ export default function TodayPage() {
     try {
       const results = await searchManualLocations(trimmed);
       setSearchResults(results);
-      if (!results.length) setSearchError("No results.");
+      if (!results.length) setSearchError('No results.');
     } catch (e) {
       setSearchError(e instanceof Error ? e.message : String(e));
       setSearchResults([]);
@@ -580,8 +682,8 @@ export default function TodayPage() {
         savedLocation &&
           savedLocation.latitude === result.latitude &&
           savedLocation.longitude === result.longitude
-          ? "saved"
-          : "manual",
+          ? 'saved'
+          : 'manual',
         formatLocationLabel(result),
       );
       setSavedLocation(savedLocationKey, result);
@@ -599,108 +701,167 @@ export default function TodayPage() {
     if (!savedLocationKey) return;
     setSavedLocation(savedLocationKey, null);
     setSavedLocationState(null);
-    setLocationSource((prev) => (prev === "saved" ? null : prev));
+    setLocationSource((prev) => (prev === 'saved' ? null : prev));
   }
 
   if (!authReady) {
     return (
-      <section className="app-card rounded-3xl p-6 text-sm muted-copy">
+      <section className='app-card rounded-3xl p-6 text-sm muted-copy'>
         Loading...
       </section>
     );
   }
 
   return (
-    <div className="space-y-5">
+    <div className='space-y-5'>
       {/* ── Mood Banner ── */}
       {current ? (
-        <div className="mood-banner">
-          <div className="mood-gradient" ref={gradientRef} />
-          <div className="mood-glow" ref={glowRef} />
-          <div className="mood-particles" ref={particlesRef} />
-          <div className="mood-overlay" />
-          <div className="mood-content">
+        <div className='mood-banner'>
+          <div className='mood-gradient' ref={gradientRef} />
+          <div className='mood-glow' ref={glowRef} />
+          <div className='mood-particles' ref={particlesRef} />
+          <div className='mood-overlay' />
+          <div className='mood-content'>
             <div>
-              <div className="mood-date">Today · <span>{localDateFormatted}</span></div>
-              <div className="mood-sub">
-                {userProfile?.displayName
-                  ? `Good morning, ${userProfile.displayName} — here's your look`
-                  : "Here's your look for today"}
+              <div className='mood-date'>
+                Today · <span>{localDateFormatted}</span>
+              </div>
+              <div className='mood-sub'>
+                {userProfile?.displayName ? (
+                  <>
+                    {greeting}, <strong>{userProfile.displayName}</strong> -
+                    Here&apos;s your look
+                  </>
+                ) : (
+                  "Here's your look for today"
+                )}
               </div>
             </div>
-            <div className="mood-weather">
-              <div className="mood-temp">{current.debugScores.temperatureC.toFixed(0)}°</div>
-              <div className="mood-desc">
-                {getMoodConfig(current.debugScores.temperatureC, current.debugScores.isRaining).desc}
-                {locationSource === "device" ? "" :
-                  activeLocationLabel ? ` · ${activeLocationLabel.split(",")[0]}` : ""}
+            <div className='mood-weather'>
+              <div className='mood-temp'>
+                {current.debugScores.temperatureC.toFixed(0)}°
               </div>
-              <div className="mood-wpills">
-                {current.debugScores.isRaining && <span className="mood-wpill">Carry Umbrella</span>}
-                {current.debugScores.temperatureC > 28 && <span className="mood-wpill">UV High</span>}
-                {current.debugScores.temperatureC > 25 && !current.debugScores.isRaining && <span className="mood-wpill">Humid</span>}
-                {current.debugScores.temperatureC < 10 && <span className="mood-wpill">Layer Up</span>}
-                {current.decisionSource !== "ai" && <span className="mood-wpill">Fallback</span>}
+              <div className='mood-desc'>
+                {
+                  getMoodConfig(
+                    current.debugScores.temperatureC,
+                    current.debugScores.isRaining,
+                  ).desc
+                }
+                {locationSource === 'device'
+                  ? ''
+                  : activeLocationLabel
+                    ? ` · ${activeLocationLabel.split(',')[0]}`
+                    : ''}
+              </div>
+              <div className='mood-wpills'>
+                {current.debugScores.isRaining && (
+                  <span className='mood-wpill'>Carry Umbrella</span>
+                )}
+                {current.debugScores.temperatureC > 28 && (
+                  <span className='mood-wpill'>UV High</span>
+                )}
+                {current.debugScores.temperatureC > 25 &&
+                  !current.debugScores.isRaining && (
+                    <span className='mood-wpill'>Humid</span>
+                  )}
+                {current.debugScores.temperatureC < 10 && (
+                  <span className='mood-wpill'>Layer Up</span>
+                )}
+                {current.decisionSource !== 'ai' && (
+                  <span className='mood-wpill'>Fallback</span>
+                )}
               </div>
             </div>
           </div>
         </div>
       ) : !needs ? (
         /* Fallback date header when no outfit yet */
-        <div className="flex items-center justify-between">
-          <span style={{
-            fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-            fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--foreground)",
-          }}>
-            Today · <span style={{ color: "oklch(75% 0.18 200)" }}>{localDateFormatted}</span>
+        <div className='flex items-center justify-between'>
+          <span
+            style={{
+              fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+              color: 'var(--foreground)',
+            }}
+          >
+            Today ·{' '}
+            <span style={{ color: 'oklch(75% 0.18 200)' }}>
+              {localDateFormatted}
+            </span>
           </span>
         </div>
       ) : null}
 
       {/* ── Location error ── */}
       {locationError && !needs ? (
-        <section className="app-card rounded-3xl p-4">
-          <div className="space-y-4">
+        <section className='app-card rounded-3xl p-4'>
+          <div className='space-y-4'>
             <div>
-              <div className="text-sm text-foreground">Location unavailable</div>
-              <div className="mt-1 text-sm muted-copy">{locationError}</div>
+              <div className='text-sm text-foreground'>
+                Location unavailable
+              </div>
+              <div className='mt-1 text-sm muted-copy'>{locationError}</div>
             </div>
             {savedLocation ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button type="button" onClick={() => void onUseLocation(savedLocation)} className="button-secondary">
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+                <button
+                  type='button'
+                  onClick={() => void onUseLocation(savedLocation)}
+                  className='button-secondary'
+                >
                   Use {formatLocationLabel(savedLocation)}
                 </button>
-                <button type="button" onClick={onClearSavedLocation} className="button-ghost">
+                <button
+                  type='button'
+                  onClick={onClearSavedLocation}
+                  className='button-ghost'
+                >
                   Clear saved location
                 </button>
               </div>
             ) : null}
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className='flex flex-col gap-3 sm:flex-row'>
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search city"
-                className="input-base w-full"
+                placeholder='Search city'
+                className='input-base w-full'
               />
-              <button type="button" onClick={() => void onSearchLocation()} disabled={searchLoading} className="button-secondary">
-                {searchLoading ? "Searching..." : "Search"}
+              <button
+                type='button'
+                onClick={() => void onSearchLocation()}
+                disabled={searchLoading}
+                className='button-secondary'
+              >
+                {searchLoading ? 'Searching...' : 'Search'}
               </button>
-              <button type="button" onClick={() => void loadInitialRecommendation()} className="button-ghost">
+              <button
+                type='button'
+                onClick={() => void loadInitialRecommendation()}
+                className='button-ghost'
+              >
                 Retry device
               </button>
             </div>
-            {searchError ? <div className="text-sm muted-copy">{searchError}</div> : null}
+            {searchError ? (
+              <div className='text-sm muted-copy'>{searchError}</div>
+            ) : null}
             {searchResults.length > 0 ? (
-              <div className="space-y-2">
+              <div className='space-y-2'>
                 {searchResults.map((result) => (
                   <button
                     key={`${result.name}-${result.latitude}-${result.longitude}`}
-                    type="button"
+                    type='button'
                     onClick={() => void onUseLocation(result)}
-                    className="subtle-card flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left"
+                    className='subtle-card flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left'
                   >
-                    <span className="text-sm text-foreground">{formatLocationLabel(result)}</span>
-                    <span className="muted-copy text-xs">Use</span>
+                    <span className='text-sm text-foreground'>
+                      {formatLocationLabel(result)}
+                    </span>
+                    <span className='muted-copy text-xs'>Use</span>
                   </button>
                 ))}
               </div>
@@ -712,57 +873,93 @@ export default function TodayPage() {
       {/* ── Empty wardrobe state ── */}
       {needs ? (
         <>
-          <section className="app-card rounded-3xl p-9 text-center">
-            <div className="flex flex-col items-center gap-4">
-              <div style={{
-                width: 56, height: 56, borderRadius: 18,
-                background: "var(--surface-subtle)", border: "1px solid var(--border)",
-                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
-              }}>
+          <section className='app-card rounded-3xl p-9 text-center'>
+            <div className='flex flex-col items-center gap-4'>
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 18,
+                  background: 'var(--surface-subtle)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 24,
+                }}
+              >
                 👕
               </div>
-              <div className="space-y-2">
-                <p className="text-lg font-bold tracking-tight text-foreground">Build your wardrobe first</p>
-                <p className="text-sm muted-copy max-w-xs mx-auto">
-                  Add at least one item in each category to receive daily outfit recommendations.
+              <div className='space-y-2'>
+                <p className='text-lg font-bold tracking-tight text-foreground'>
+                  Build your wardrobe first
+                </p>
+                <p className='text-sm muted-copy max-w-xs mx-auto'>
+                  Add at least one item in each category to receive daily outfit
+                  recommendations.
                 </p>
               </div>
-              <div className="flex flex-wrap justify-center gap-2">
-                {needs.top && <span className="missing-tag">+ Tops missing</span>}
-                {needs.bottom && <span className="missing-tag">+ Bottoms missing</span>}
-                {needs.shoe && <span className="missing-tag">+ Shoes missing</span>}
+              <div className='flex flex-wrap justify-center gap-2'>
+                {needs.top && (
+                  <span className='missing-tag'>+ Tops missing</span>
+                )}
+                {needs.bottom && (
+                  <span className='missing-tag'>+ Bottoms missing</span>
+                )}
+                {needs.shoe && (
+                  <span className='missing-tag'>+ Shoes missing</span>
+                )}
               </div>
-              <Link href="/library" className="button-primary">Go to wardrobe →</Link>
+              <Link href='/library' className='button-primary'>
+                Go to wardrobe →
+              </Link>
             </div>
           </section>
 
           {userProfile !== null && !userProfile.hasTryOnPhoto ? (
-            <section className="app-card rounded-3xl p-9 text-center">
-              <div className="flex flex-col items-center gap-4">
-                <div style={{
-                  width: 56, height: 56, borderRadius: 18,
-                  background: "var(--surface-subtle)", border: "1px solid var(--border)",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
-                  color: "oklch(75% 0.18 200)",
-                }}>
+            <section className='app-card rounded-3xl p-9 text-center'>
+              <div className='flex flex-col items-center gap-4'>
+                <div
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 18,
+                    background: 'var(--surface-subtle)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 24,
+                    color: 'oklch(75% 0.18 200)',
+                  }}
+                >
                   ✦
                 </div>
-                <div className="space-y-2">
-                  <p className="text-base font-bold tracking-tight text-foreground">AI outfit preview unavailable</p>
-                  <p className="text-sm muted-copy max-w-xs mx-auto">
-                    Upload a full-body photo on your Profile to enable AI-generated outfit previews.
+                <div className='space-y-2'>
+                  <p className='text-base font-bold tracking-tight text-foreground'>
+                    AI outfit preview unavailable
+                  </p>
+                  <p className='text-sm muted-copy max-w-xs mx-auto'>
+                    Upload a full-body photo on your Profile to enable
+                    AI-generated outfit previews.
                   </p>
                 </div>
-                <Link href="/profile" className="button-primary">Go to Profile →</Link>
+                <Link href='/profile' className='button-primary'>
+                  Go to Profile →
+                </Link>
               </div>
             </section>
           ) : null}
         </>
       ) : error ? (
-        <section className="app-card rounded-3xl p-4">
-          <div className="space-y-2">
-            <div className="text-sm text-danger">{error}</div>
-            <button type="button" onClick={() => void loadInitialRecommendation()} className="button-secondary">
+        <section className='app-card rounded-3xl p-4'>
+          <div className='space-y-2'>
+            <div className='text-sm text-danger'>{error}</div>
+            <button
+              type='button'
+              onClick={() => void loadInitialRecommendation()}
+              className='button-secondary'
+            >
               Retry
             </button>
           </div>
@@ -771,95 +968,155 @@ export default function TodayPage() {
 
       {/* ── Loading shimmer ── */}
       {loading && !current ? (
-        <div className="outfit-hero">
-          <div className="outfit-hero-item outfit-hero-main shimmer" />
-          <div className="outfit-hero-item shimmer" />
-          <div className="outfit-hero-item shimmer" />
+        <div className='outfit-hero'>
+          <div className='outfit-hero-item outfit-hero-main shimmer' />
+          <div className='outfit-hero-item shimmer' />
+          <div className='outfit-hero-item shimmer' />
         </div>
       ) : null}
 
       {/* ── Hero Outfit Collage ── */}
       {current ? (
-        <div className="outfit-hero">
+        <div className='outfit-hero'>
           {/* Main — Top (spans 2 rows) */}
-          <div className="outfit-hero-item outfit-hero-main" onClick={() => void onShowAnother()}>
+          <div
+            className='outfit-hero-item outfit-hero-main'
+            onClick={() => void onShowAnother()}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={current.top.photoUrl} alt={current.top.subtype} />
-            <div className="outfit-item-tag">
+            <div className='outfit-item-tag'>
               <div>
-                <div className="outfit-item-tag-category">Top</div>
-                <div className="outfit-item-tag-name">{formatEnumLabel(current.top.subtype)}</div>
+                <div className='outfit-item-tag-category'>Top</div>
+                <div className='outfit-item-tag-name'>
+                  {formatEnumLabel(current.top.subtype)}
+                </div>
               </div>
-              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.top.colorFamily] ?? "#888" }} />
+              <div
+                className='outfit-item-swatch'
+                style={{
+                  background: COLOR_SWATCHES[current.top.colorFamily] ?? '#888',
+                }}
+              />
             </div>
-            <div className="outfit-swap-hint">↔ Another look</div>
+            <div className='outfit-swap-hint'>↔ Another look</div>
           </div>
           {/* Bottom */}
-          <div className="outfit-hero-item" onClick={() => void onShowAnother()}>
+          <div
+            className='outfit-hero-item'
+            onClick={() => void onShowAnother()}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={current.bottom.photoUrl} alt={current.bottom.subtype} />
-            <div className="outfit-item-tag">
+            <div className='outfit-item-tag'>
               <div>
-                <div className="outfit-item-tag-category">Bottom</div>
-                <div className="outfit-item-tag-name">{formatEnumLabel(current.bottom.subtype)}</div>
+                <div className='outfit-item-tag-category'>Bottom</div>
+                <div className='outfit-item-tag-name'>
+                  {formatEnumLabel(current.bottom.subtype)}
+                </div>
               </div>
-              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.bottom.colorFamily] ?? "#888" }} />
+              <div
+                className='outfit-item-swatch'
+                style={{
+                  background:
+                    COLOR_SWATCHES[current.bottom.colorFamily] ?? '#888',
+                }}
+              />
             </div>
-            <div className="outfit-swap-hint">↔ Another look</div>
+            <div className='outfit-swap-hint'>↔ Another look</div>
           </div>
           {/* Shoes */}
-          <div className="outfit-hero-item" onClick={() => void onShowAnother()}>
+          <div
+            className='outfit-hero-item'
+            onClick={() => void onShowAnother()}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={current.shoe.photoUrl} alt={current.shoe.subtype} />
-            <div className="outfit-item-tag">
+            <div className='outfit-item-tag'>
               <div>
-                <div className="outfit-item-tag-category">Shoes</div>
-                <div className="outfit-item-tag-name">{formatEnumLabel(current.shoe.subtype)}</div>
+                <div className='outfit-item-tag-category'>Shoes</div>
+                <div className='outfit-item-tag-name'>
+                  {formatEnumLabel(current.shoe.subtype)}
+                </div>
               </div>
-              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.shoe.colorFamily] ?? "#888" }} />
+              <div
+                className='outfit-item-swatch'
+                style={{
+                  background:
+                    COLOR_SWATCHES[current.shoe.colorFamily] ?? '#888',
+                }}
+              />
             </div>
-            <div className="outfit-swap-hint">↔ Another look</div>
+            <div className='outfit-swap-hint'>↔ Another look</div>
           </div>
         </div>
       ) : null}
 
       {/* ── Fit Score Ring ── */}
       {current ? (
-        <div className="score-ring-section">
-          <div className="score-ring-wrap">
-            <svg width="108" height="108" viewBox="0 0 108 108">
-              <circle className="ring-track" cx="54" cy="54" r="46" />
+        <div className='score-ring-section'>
+          <div className='score-ring-wrap'>
+            <svg width='108' height='108' viewBox='0 0 108 108'>
+              <circle className='ring-track' cx='54' cy='54' r='46' />
               <circle
-                className="ring-fill"
-                cx="54" cy="54" r="46"
-                style={{ strokeDashoffset: scoreAnimated ? 289 - (289 * current.totalScore) : 289 }}
+                className='ring-fill'
+                cx='54'
+                cy='54'
+                r='46'
+                style={{
+                  strokeDashoffset: scoreAnimated
+                    ? 289 - 289 * current.totalScore
+                    : 289,
+                }}
               />
             </svg>
-            <div className="score-ring-center">
-              <div className="score-ring-num">{scoreDisplay}</div>
-              <div className="score-ring-label">fit score</div>
+            <div className='score-ring-center'>
+              <div className='score-ring-num'>{scoreDisplay}</div>
+              <div className='score-ring-label'>fit score</div>
             </div>
           </div>
-          <div className="score-ring-details">
-            <div className="score-ring-title">
-              {userProfile?.displayName ? `Looking sharp, ${userProfile.displayName} ✦` : "Looking sharp ✦"}
+          <div className='score-ring-details'>
+            <div className='score-ring-title'>
+              {userProfile?.displayName ? (
+                <>
+                  Looking sharp, <strong>{userProfile.displayName}</strong> ✦
+                </>
+              ) : (
+                'Looking sharp ✦'
+              )}
             </div>
-            <div className="score-mini-bars">
+            <div className='score-mini-bars'>
               {[
-                { label: "Weather", value: current.debugScores.weatherScore },
-                { label: "Color harmony", value: current.debugScores.colorHarmonyScore, warm: true },
-                { label: "Style cohesion", value: current.debugScores.styleConsistencyScore },
-                { label: "Formality", value: current.debugScores.formalityAlignmentScore },
+                { label: 'Weather', value: current.debugScores.weatherScore },
+                {
+                  label: 'Color harmony',
+                  value: current.debugScores.colorHarmonyScore,
+                  warm: true,
+                },
+                {
+                  label: 'Style cohesion',
+                  value: current.debugScores.styleConsistencyScore,
+                },
+                {
+                  label: 'Formality',
+                  value: current.debugScores.formalityAlignmentScore,
+                },
               ].map(({ label, value, warm }) => (
-                <div key={label} className="score-mini-row">
-                  <span className="score-mini-label">{label}</span>
-                  <div className="score-mini-track">
+                <div key={label} className='score-mini-row'>
+                  <span className='score-mini-label'>{label}</span>
+                  <div className='score-mini-track'>
                     <div
-                      className={`score-mini-fill${warm ? " warm" : ""}`}
-                      style={{ transform: scoreAnimated ? `scaleX(${value})` : "scaleX(0)" }}
+                      className={`score-mini-fill${warm ? ' warm' : ''}`}
+                      style={{
+                        transform: scoreAnimated
+                          ? `scaleX(${value})`
+                          : 'scaleX(0)',
+                      }}
                     />
                   </div>
-                  <span className="score-mini-val">{Math.round(value * 100)}%</span>
+                  <span className='score-mini-val'>
+                    {Math.round(value * 100)}%
+                  </span>
                 </div>
               ))}
             </div>
@@ -869,37 +1126,60 @@ export default function TodayPage() {
 
       {/* ── AI Chat Card ── */}
       {current && userProfile !== null ? (
-        <div className="ai-chat-card">
+        <div className='ai-chat-card'>
           {/* Header */}
-          <div className="ai-chat-header">
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div className="ai-orb">✦</div>
+          <div className='ai-chat-header'>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div className='ai-orb'>✦</div>
               <div>
-                <div style={{ fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)", fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>
+                <div
+                  style={{
+                    fontFamily:
+                      "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    letterSpacing: '-0.01em',
+                  }}
+                >
                   Stylist AI
                 </div>
-                <div style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 300 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--muted-foreground)',
+                    fontWeight: 300,
+                  }}
+                >
                   Personalized reasoning
                 </div>
               </div>
             </div>
             {userProfile.hasTryOnPhoto ? (
               <button
-                type="button"
-                className="btn-ootd"
+                type='button'
+                className='btn-ootd'
                 onClick={() => tryOnRef.current?.generate()}
               >
                 OOTD ↗
               </button>
             ) : (
               <Link
-                href="/profile"
+                href='/profile'
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  background: "oklch(75% 0.18 200)", color: "oklch(9% 0.008 240)",
-                  fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                  fontSize: 11, fontWeight: 700, padding: "7px 14px", borderRadius: 100,
-                  letterSpacing: "0.06em", textTransform: "uppercase", textDecoration: "none",
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: 'oklch(75% 0.18 200)',
+                  color: 'oklch(9% 0.008 240)',
+                  fontFamily:
+                    "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '7px 14px',
+                  borderRadius: 100,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  textDecoration: 'none',
                 }}
               >
                 Set up
@@ -910,33 +1190,49 @@ export default function TodayPage() {
           {/* Embedded TryOnPreview (only shows when loading/success/fallback) */}
           <TryOnPreview
             ref={tryOnRef}
-            outfit={{ top: current.top, bottom: current.bottom, shoe: current.shoe }}
+            outfit={{
+              top: current.top,
+              bottom: current.bottom,
+              shoe: current.shoe,
+            }}
             hasTryOnPhoto={userProfile.hasTryOnPhoto}
             displayName={userProfile.displayName}
             embedded
           />
 
           {/* Chat bubble */}
-          <div style={{ padding: "18px 20px" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: 9,
-                background: "oklch(75% 0.18 200 / 0.1)",
-                border: "1px solid oklch(75% 0.18 200 / 0.3)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 13, flexShrink: 0, marginTop: 14,
-              }}>✦</div>
-              <div className="ai-chat-bubble">
-                {chatPhase === "dots" ? (
-                  <div className="typing-dots">
-                    <div className="typing-dot" />
-                    <div className="typing-dot" />
-                    <div className="typing-dot" />
+          <div style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9,
+                  background: 'oklch(75% 0.18 200 / 0.1)',
+                  border: '1px solid oklch(75% 0.18 200 / 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                  flexShrink: 0,
+                  marginTop: 14,
+                }}
+              >
+                ✦
+              </div>
+              <div className='ai-chat-bubble'>
+                {chatPhase === 'dots' ? (
+                  <div className='typing-dots'>
+                    <div className='typing-dot' />
+                    <div className='typing-dot' />
+                    <div className='typing-dot' />
                   </div>
                 ) : (
                   <>
                     {chatText}
-                    <span className={`ai-chat-cursor${chatPhase === "done" ? " done" : ""}`} />
+                    <span
+                      className={`ai-chat-cursor${chatPhase === 'done' ? ' done' : ''}`}
+                    />
                   </>
                 )}
               </div>
@@ -944,30 +1240,43 @@ export default function TodayPage() {
           </div>
 
           {/* Action row */}
-          <div style={{
-            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
-            padding: "16px 20px 20px", borderTop: "1px solid var(--border)",
-          }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 10,
+              padding: '16px 20px 20px',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
             <button
-              type="button"
+              type='button'
               onClick={() => void onMarkWorn()}
               disabled={marked}
-              className="button-primary"
+              className='button-primary'
               style={{
-                borderRadius: 100, padding: "13px 20px", fontSize: 14, fontWeight: 600,
-                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                borderRadius: 100,
+                padding: '13px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily:
+                  "var(--lp-font-display, 'Space Grotesk', sans-serif)",
               }}
             >
-              {marked ? "Worn today ✓" : "Mark as worn"}
+              {marked ? 'Worn today ✓' : 'Mark as worn'}
             </button>
             <button
-              type="button"
+              type='button'
               onClick={() => void onShowAnother()}
               disabled={loading}
-              className="button-secondary"
+              className='button-secondary'
               style={{
-                borderRadius: 100, padding: "13px 20px", fontSize: 14, fontWeight: 600,
-                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                borderRadius: 100,
+                padding: '13px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                fontFamily:
+                  "var(--lp-font-display, 'Space Grotesk', sans-serif)",
               }}
             >
               Another look
@@ -978,30 +1287,49 @@ export default function TodayPage() {
 
       {/* ── Week History ── */}
       {current ? (
-        <div className="week-section">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <span style={{
-              fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-              fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em",
-            }}>
+        <div className='week-section'>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 16,
+            }}
+          >
+            <span
+              style={{
+                fontFamily:
+                  "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                fontSize: 14,
+                fontWeight: 600,
+                letterSpacing: '-0.01em',
+              }}
+            >
               This week
             </span>
             {streak > 0 && (
-              <span style={{
-                display: "flex", alignItems: "center", gap: 5,
-                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                fontSize: 12, fontWeight: 700, color: "var(--warning)",
-              }}>
+              <span
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  fontFamily:
+                    "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--warning)',
+                }}
+              >
                 🔥 {streak}-day streak
               </span>
             )}
           </div>
-          <div className="week-days">
+          <div className='week-days'>
             {weekDays.map((day) => (
-              <div key={day.key} className="week-day">
-                <div className="week-day-label">{day.label}</div>
+              <div key={day.key} className='week-day'>
+                <div className='week-day-label'>{day.label}</div>
                 <div className={`week-dot-wrap ${day.state}`}>
-                  <div className="week-dot" />
+                  <div className='week-dot' />
                 </div>
               </div>
             ))}

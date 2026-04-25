@@ -54,9 +54,9 @@ export async function applyAiRecommendationRerank(args: {
 }) {
   const { temperatureC, precipitationMm, rankedOptions } = args;
 
-  if (!isAiRecommenderEnabled()) {
+  if (!await isAiRecommenderEnabled()) {
     console.info("[gemini:rerank] fallback", {
-      reason: getAiRecommenderDisabledReason(),
+      reason: await getAiRecommenderDisabledReason(),
       candidateCount: rankedOptions.length,
     });
     return {

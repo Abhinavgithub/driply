@@ -134,12 +134,12 @@ async function resolveUploadMetadata(args: {
 
   const needsAiForKind = !manualKind || !manualSubtype;
   const needsAiForAttributes = hasUnknownAttributes(manualAttributes);
-  const shouldAttemptAi = isAiClassificationEnabled() && (needsAiForKind || needsAiForAttributes);
+  const shouldAttemptAi = await isAiClassificationEnabled() && (needsAiForKind || needsAiForAttributes);
 
   if (!shouldAttemptAi) {
     if (!manualKind) {
       console.info("[gemini:classification] skipped", {
-        reason: getAiClassificationDisabledReason() || "Missing manual kind/subtype and AI classification disabled",
+        reason: (await getAiClassificationDisabledReason()) || "Missing manual kind/subtype and AI classification disabled",
         manualKind,
         manualSubtype,
       });
@@ -234,7 +234,7 @@ async function resolveUploadMetadata(args: {
         metadataSource: "MANUAL",
         visualSummary: null,
         analysisConfidence: null,
-        analysisModel: getClassifierModel(),
+        analysisModel: await getClassifierModel(),
         analysisPromptVersion: getClassifierPromptVersion(),
         analysisErrorCode: getGeminiErrorCode(error),
         attributes: manualAttributes,
@@ -251,7 +251,7 @@ async function resolveUploadMetadata(args: {
         attributes: manualAttributes,
       }),
       analysisConfidence: null,
-      analysisModel: getClassifierModel(),
+      analysisModel: await getClassifierModel(),
       analysisPromptVersion: getClassifierPromptVersion(),
       analysisErrorCode: getGeminiErrorCode(error),
       attributes: manualAttributes,

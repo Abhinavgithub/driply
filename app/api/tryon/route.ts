@@ -26,12 +26,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
   }
 
-  const provider = getTryOnProvider();
+  const provider = await getTryOnProvider();
 
   const enabled =
-    provider === "flux"   ? isFluxTryOnEnabled()   :
-    provider === "openai" ? isOpenAITryOnEnabled()  :
-                            isAiTryOnEnabled();
+    provider === "flux"   ? await isFluxTryOnEnabled()   :
+    provider === "openai" ? await isOpenAITryOnEnabled()  :
+                            await isAiTryOnEnabled();
   if (!enabled) {
     return NextResponse.json({ ok: false, reason: "tryon_disabled" });
   }
