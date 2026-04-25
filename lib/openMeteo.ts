@@ -11,7 +11,15 @@ export type GeocodingResult = {
   longitude: number;
 };
 
+type CachedWeather = { result: WeatherResult; expiresAt: number };
+const weatherCache = new Map<string, CachedWeather>();
+const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 export async function fetchWeather(lat: number, lon: number): Promise<WeatherResult> {
+  const cacheKey = `${lat.toFixed(2)}_${lon.toFixed(2)}`;
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", lat.toString());
   url.searchParams.set("longitude", lon.toString());
@@ -36,7 +44,9 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
     throw new Error("Weather response missing expected fields.");
   }
 
-  return { temperatureC, precipitationMm };
+  const result = { temperatureC, precipitationMm };
+  weatherCache.set(cacheKey, { result, expiresAt: Date.now() + WEATHER_CACHE_TTL_MS });
+  return result;
 }
 
 export async function searchLocations(query: string): Promise<GeocodingResult[]> {
