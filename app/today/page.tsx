@@ -354,7 +354,7 @@ export default function TodayPage() {
         setUserProfile({ displayName: json.displayName ?? null, hasTryOnPhoto: Boolean(json.hasTryOnPhoto) });
       })
       .catch(() => {});
-    void fetch("/api/outfits")
+    void fetch(`/api/outfits?date=${localDateKey}`)
       .then((r) => r.json())
       .then((json) => {
         if (!active) return;
@@ -464,6 +464,7 @@ export default function TodayPage() {
       pendingGeoRef.current = null;
       await loadRecommendationsForCoordinates(nextCoords, "device");
     } catch (e) {
+      pendingGeoRef.current = null; // clear so "Retry device" calls geolocation fresh
       const message = e instanceof Error ? e.message : String(e);
       setLocationError(message);
       if (storedLocation) {

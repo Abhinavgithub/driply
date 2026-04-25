@@ -12,15 +12,19 @@ const BodySchema = z.object({
   shoeItemId: z.string().min(1),
 });
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const sevenDaysAgo = new Date();
+  // Accept the client's local date so the 7-day window is anchored to the
+  // user's local day, not UTC (avoids off-by-one near UTC midnight).
+  const localDate = new URL(req.url).searchParams.get("date");
+  const anchorKey = localDate?.match(/^\d{4}-\d{2}-\d{2}$/) ? localDate : new Date().toISOString().slice(0, 10);
+  const anchor = dateKeyToUtcStart(anchorKey);
+  const sevenDaysAgo = new Date(anchor);
   sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
-  sevenDaysAgo.setUTCHours(0, 0, 0, 0);
 
   const records = await prisma.outfitHistory.findMany({
     where: {

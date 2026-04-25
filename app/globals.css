@@ -133,7 +133,7 @@ textarea {
   letter-spacing: 0.04em;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .bottom-app-nav { display: flex; }
   .page-shell > main { padding-bottom: calc(64px + 20px) !important; }
   .mood-banner { height: 160px; margin-top: -16px; }
