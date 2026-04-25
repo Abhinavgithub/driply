@@ -18,8 +18,10 @@ export async function getConfig(key: string): Promise<string | undefined> {
       cache = Object.fromEntries(rows.map((r) => [r.key, r.value]));
       cacheExpiresAt = now + CACHE_TTL_MS;
     } catch {
-      // DB unavailable — fall back to env var; don't update cache so next
-      // request will retry the DB.
+      // DB unavailable — prefer stale cache over env defaults so a transient
+      // outage doesn't flip feature flags. Fall back to process.env only on
+      // a cold start where no cache has been loaded yet.
+      if (cache !== null) return cache[key] ?? process.env[key];
       return process.env[key];
     }
   }
