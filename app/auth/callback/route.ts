@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { syncAuthUser } from "@/lib/auth";
+import { syncAuthUserWithCreationFlag } from "@/lib/auth";
 import { normalizeNextPath } from "@/lib/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -27,7 +27,10 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (user) {
-    await syncAuthUser(user);
+    const { wasCreated } = await syncAuthUserWithCreationFlag(user);
+    if (wasCreated) {
+      return NextResponse.redirect(new URL("/onboarding", request.url));
+    }
   }
 
   return NextResponse.redirect(new URL(nextPath, request.url));

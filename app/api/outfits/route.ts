@@ -12,6 +12,28 @@ const BodySchema = z.object({
   shoeItemId: z.string().min(1),
 });
 
+export async function GET() {
+  const currentUser = await getCurrentUser();
+  if (!currentUser) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+  sevenDaysAgo.setUTCHours(0, 0, 0, 0);
+
+  const records = await prisma.outfitHistory.findMany({
+    where: {
+      userId: currentUser.appUser.id,
+      date: { gte: sevenDaysAgo },
+    },
+    select: { date: true },
+    orderBy: { date: "asc" },
+  });
+
+  const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
+  return NextResponse.json({ dateKeys });
+}
 
 export async function POST(req: NextRequest) {
   const currentUser = await getCurrentUser();

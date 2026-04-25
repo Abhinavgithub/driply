@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
-import { TryOnPreview } from "@/components/tryon-preview";
+import { TryOnPreview, type TryOnPreviewHandle } from "@/components/tryon-preview";
 import { formatEnumLabel } from "@/lib/itemAttributes";
 
 type Item = {
@@ -80,6 +80,36 @@ type UserProfile = {
 
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
 
+const COLOR_SWATCHES: Record<string, string> = {
+  WHITE: "#f0ece4", BLACK: "#1a1a1a", GRAY: "#8a8a8a",
+  NAVY: "#1a2d5a", BLUE: "#3a6eb5", LIGHT_BLUE: "#8abbe0",
+  DENIM: "#4a6fa5", RED: "#c0392b", PINK: "#e8a0b0",
+  ORANGE: "#e87722", YELLOW: "#f5c842", GREEN: "#2d7d46",
+  OLIVE: "#6b7c3d", KHAKI: "#c4b490", BROWN: "#7d5a3c",
+  BEIGE: "#e8d8c0", CREAM: "#f5edd5", PURPLE: "#7b5ca8",
+  MAROON: "#7d2038",
+};
+
+function getMoodConfig(tempC: number, isRaining: boolean) {
+  if (isRaining) return {
+    gradient: "linear-gradient(135deg, oklch(24% 0.10 280) 0%, oklch(16% 0.08 300) 50%, oklch(10% 0.04 270) 100%)",
+    glow: "radial-gradient(ellipse 65% 70% at 20% 60%, oklch(38% 0.16 285 / 0.60) 0%, transparent 70%)",
+    particleColor: "oklch(78% 0.06 280)",
+    desc: "Rainy",
+  };
+  if (tempC < 16) return {
+    gradient: "linear-gradient(135deg, oklch(45% 0.18 245) 0%, oklch(32% 0.20 235) 55%, oklch(15% 0.06 240) 100%)",
+    glow: "radial-gradient(ellipse 60% 80% at 20% 60%, oklch(62% 0.22 240 / 0.50) 0%, transparent 70%)",
+    particleColor: "oklch(82% 0.18 235)",
+    desc: "Cool",
+  };
+  return {
+    gradient: "linear-gradient(135deg, oklch(52% 0.16 60) 0%, oklch(38% 0.18 200) 55%, oklch(18% 0.06 240) 100%)",
+    glow: "radial-gradient(ellipse 60% 80% at 20% 60%, oklch(70% 0.20 60 / 0.45) 0%, transparent 70%), radial-gradient(ellipse 50% 70% at 75% 30%, oklch(65% 0.20 200 / 0.35) 0%, transparent 65%)",
+    particleColor: "oklch(85% 0.18 65)",
+    desc: "Sunny",
+  };
+}
 
 function getLocalDateKey() {
   return new Date().toLocaleDateString("en-CA");
@@ -123,7 +153,6 @@ function isRetryableGeolocationError(error: GeolocationPositionError) {
 
 function getSavedLocation(savedLocationKey: string): SavedLocation | null {
   if (typeof window === "undefined") return null;
-
   try {
     const raw = window.localStorage.getItem(savedLocationKey);
     if (!raw) return null;
@@ -158,19 +187,17 @@ async function getGeolocationAttempt(): Promise<Coordinates> {
   if (!("geolocation" in navigator)) {
     throw new Error("Geolocation not supported.");
   }
-
   return await new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
       (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 15000 },
+      { enableHighAccuracy: true, timeout: 8000 },
     );
   });
 }
 
 async function getGeolocationWithRetry(): Promise<Coordinates> {
   let lastError: unknown;
-
   for (let attempt = 0; attempt <= GEOLOCATION_RETRY_DELAYS_MS.length; attempt++) {
     try {
       return await getGeolocationAttempt();
@@ -181,16 +208,13 @@ async function getGeolocationWithRetry(): Promise<Coordinates> {
           isGeolocationPositionError(error) ? getGeolocationErrorMessage(error) : String(error),
         );
       }
-
       if (attempt === GEOLOCATION_RETRY_DELAYS_MS.length) break;
       await sleep(GEOLOCATION_RETRY_DELAYS_MS[attempt]);
     }
   }
-
   if (isGeolocationPositionError(lastError)) {
     throw new Error(getGeolocationErrorMessage(lastError));
   }
-
   throw new Error("Location failed.");
 }
 
@@ -215,19 +239,10 @@ async function searchManualLocations(query: string) {
   return (json.results ?? []) as LocationResult[];
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-t border-border py-3 text-sm">
-      <span className="muted-copy">{label}</span>
-      <span className="text-foreground">{value}</span>
-    </div>
-  );
-}
-
 export default function TodayPage() {
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [options, setOptions] = useState<RecommendationOption[]>([]);
@@ -236,7 +251,6 @@ export default function TodayPage() {
   const [marked, setMarked] = useState(false);
   const [needs, setNeeds] = useState<{ top: boolean; bottom: boolean; shoe: boolean } | null>(null);
   const [cursor, setCursor] = useState(0);
-  const [showDetails, setShowDetails] = useState(false);
   const [locationSource, setLocationSource] = useState<LocationSource>(null);
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null);
   const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(null);
@@ -246,55 +260,185 @@ export default function TodayPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
 
+  // v2 state
+  const [wornDateKeys, setWornDateKeys] = useState<Set<string>>(new Set());
+  const [scoreDisplay, setScoreDisplay] = useState(0);
+  const [scoreAnimated, setScoreAnimated] = useState(false);
+  const [chatText, setChatText] = useState("");
+  const [chatPhase, setChatPhase] = useState<"dots" | "typing" | "done">("dots");
+
+  const particlesRef = useRef<HTMLDivElement | null>(null);
+  const gradientRef = useRef<HTMLDivElement | null>(null);
+  const glowRef = useRef<HTMLDivElement | null>(null);
+  const tryOnRef = useRef<TryOnPreviewHandle | null>(null);
+  // Pre-start geolocation on mount so it runs in parallel with auth
+  const pendingGeoRef = useRef<Promise<Coordinates> | null>(null);
+
   const pageLimit = 6;
   const localDateKey = useMemo(() => getLocalDateKey(), []);
+  const localDateFormatted = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  }, []);
   const current = options[selectedIndex] ?? null;
   const savedLocationKey = authUserId ? `driply-saved-location:${authUserId}` : null;
 
+  // Week history derived state
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const todayKey = today.toLocaleDateString("en-CA");
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 6 + i);
+      const key = d.toLocaleDateString("en-CA");
+      const isPast = key < todayKey;
+      return {
+        key,
+        label: d.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 3),
+        state: key === todayKey ? "today" : wornDateKeys.has(key) ? "worn" : isPast ? "missed" : "future",
+      };
+    });
+  }, [wornDateKeys]);
+
+  const streak = useMemo(() => {
+    let count = 0;
+    const today = new Date();
+    for (let i = 0; i <= 30; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      if (!wornDateKeys.has(d.toLocaleDateString("en-CA"))) break;
+      count++;
+    }
+    return count;
+  }, [wornDateKeys]);
+
+  // Pre-start geolocation immediately (runs in parallel with auth)
+  useEffect(() => {
+    const geo = getGeolocationWithRetry();
+    geo.catch(() => {}); // suppress unhandledrejection if wardrobe is empty and geo is never awaited
+    pendingGeoRef.current = geo;
+  }, []);
+
+  // Auth
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const supabase = getBrowserSupabaseClient();
     let active = true;
-
     void supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
       setAuthUserId(data.user?.id ?? null);
       setAuthReady(true);
     });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       setAuthUserId(session?.user?.id ?? null);
       setAuthReady(true);
     });
-
     return () => {
       active = false;
       subscription.unsubscribe();
     };
   }, []);
 
+  // Profile + week history
+  useEffect(() => {
+    if (!authUserId) return;
+    let active = true;
+    void fetch("/api/profile")
+      .then((r) => r.json())
+      .then((json) => {
+        if (!active) return;
+        setUserProfile({ displayName: json.displayName ?? null, hasTryOnPhoto: Boolean(json.hasTryOnPhoto) });
+      })
+      .catch(() => {});
+    void fetch("/api/outfits")
+      .then((r) => r.json())
+      .then((json) => {
+        if (!active) return;
+        setWornDateKeys(new Set((json.dateKeys ?? []) as string[]));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [authUserId]);
+
+  // Score ring animation
+  useEffect(() => {
+    if (!current) return;
+    const target = Math.round(current.totalScore * 100);
+    setScoreDisplay(0);
+    setScoreAnimated(false);
+    const timer = setTimeout(() => {
+      setScoreAnimated(true);
+      let val = 0;
+      const step = () => {
+        val = Math.min(val + 2, target);
+        setScoreDisplay(val);
+        if (val < target) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [current]);
+
+  // Chat typewriter effect
+  useEffect(() => {
+    if (!current) return;
+    setChatText("");
+    setChatPhase("dots");
+    const message = current.aiReason ?? current.explanation;
+    let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+    const timeout = setTimeout(() => {
+      setChatPhase("typing");
+      let i = 0;
+      cleanupInterval = setInterval(() => {
+        i++;
+        setChatText(message.slice(0, i));
+        if (i >= message.length) {
+          if (cleanupInterval) clearInterval(cleanupInterval);
+          setChatPhase("done");
+        }
+      }, 22);
+    }, 1600);
+    return () => {
+      clearTimeout(timeout);
+      if (cleanupInterval) clearInterval(cleanupInterval);
+    };
+  }, [current]);
+
+  // Mood banner particles
+  useEffect(() => {
+    if (!current || !particlesRef.current || !gradientRef.current || !glowRef.current) return;
+    const mood = getMoodConfig(current.debugScores.temperatureC, current.debugScores.isRaining);
+    gradientRef.current.style.background = mood.gradient;
+    glowRef.current.style.background = mood.glow;
+    const container = particlesRef.current;
+    container.innerHTML = "";
+    for (let i = 0; i < 14; i++) {
+      const p = document.createElement("div");
+      p.className = "mood-particle";
+      p.style.cssText = `left:${Math.random()*100}%;bottom:${Math.random()*40}%;width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;background:${mood.particleColor};--dur:${3+Math.random()*4}s;--delay:${Math.random()*4}s;`;
+      container.appendChild(p);
+    }
+  }, [current]);
+
   const loadRecommendationsForCoordinates = useCallback(
     async (nextCoords: Coordinates, source: LocationSource, locationLabel?: string) => {
       setCoords(nextCoords);
       setLocationSource(source);
       setActiveLocationLabel(locationLabel ?? null);
-
       const { res, json } = await fetchRecommendationPage({
         coords: nextCoords,
         dateKey: localDateKey,
         offset: 0,
         limit: pageLimit,
       });
-
       if (!res.ok) {
         if (json?.needs) setNeeds(json.needs);
         throw new Error(json?.error || "Recommendation failed.");
       }
-
       const data = json as RecommendationOptionsResponse;
       setOptions(data.options ?? []);
       setCursor(data.offset + (data.options?.length ?? 0));
@@ -304,8 +448,6 @@ export default function TodayPage() {
 
   const loadInitialRecommendation = useCallback(async () => {
     if (!savedLocationKey) return;
-
-    setLoading(true);
     setError(null);
     setLocationError(null);
     setMarked(false);
@@ -313,17 +455,17 @@ export default function TodayPage() {
     setOptions([]);
     setSelectedIndex(0);
     setCursor(0);
-
     const storedLocation = getSavedLocation(savedLocationKey);
     setSavedLocationState(storedLocation);
 
+    setLoading(true);
     try {
-      const nextCoords = await getGeolocationWithRetry();
+      const nextCoords = await (pendingGeoRef.current ?? getGeolocationWithRetry());
+      pendingGeoRef.current = null;
       await loadRecommendationsForCoordinates(nextCoords, "device");
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       setLocationError(message);
-
       if (storedLocation) {
         try {
           await loadRecommendationsForCoordinates(
@@ -348,21 +490,7 @@ export default function TodayPage() {
   }, [authReady, loadInitialRecommendation]);
 
   useEffect(() => {
-    if (!authUserId) return;
-    let active = true;
-    void fetch("/api/profile")
-      .then((r) => r.json())
-      .then((json) => {
-        if (!active) return;
-        setUserProfile({ displayName: json.displayName ?? null, hasTryOnPhoto: Boolean(json.hasTryOnPhoto) });
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [authUserId]);
-
-  useEffect(() => {
     setMarked(false);
-    setShowDetails(false);
   }, [selectedIndex]);
 
   async function onMarkWorn() {
@@ -382,6 +510,7 @@ export default function TodayPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Save failed.");
       setMarked(true);
+      setWornDateKeys((prev) => new Set([...prev, localDateKey]));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -393,7 +522,6 @@ export default function TodayPage() {
       setSelectedIndex(nextIndex);
       return;
     }
-
     const c = coords;
     if (!c) return;
     setLoading(true);
@@ -425,7 +553,6 @@ export default function TodayPage() {
       setSearchResults([]);
       return;
     }
-
     setSearchLoading(true);
     setSearchError(null);
     try {
@@ -442,7 +569,6 @@ export default function TodayPage() {
 
   async function onUseLocation(result: LocationResult) {
     if (!savedLocationKey) return;
-
     setLoading(true);
     setError(null);
     setSearchError(null);
@@ -469,11 +595,9 @@ export default function TodayPage() {
 
   function onClearSavedLocation() {
     if (!savedLocationKey) return;
-
     setSavedLocation(savedLocationKey, null);
     setSavedLocationState(null);
     setLocationSource((prev) => (prev === "saved" ? null : prev));
-    setSavedLocationState(null);
   }
 
   if (!authReady) {
@@ -486,54 +610,69 @@ export default function TodayPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="muted-copy">Today</span>
-        <div className="flex items-center gap-2 text-xs">
-          {current ? (
-            <span className="pill">
-              {current.debugScores.temperatureC.toFixed(1)}°C
-            </span>
-          ) : null}
-          {locationSource ? (
-            <span className="pill">
-              {locationSource === "device" ? "Device" : activeLocationLabel || "Saved location"}
-            </span>
-          ) : null}
-          {current ? (
-            <span className="pill">
-              {current.decisionSource === "ai" ? "AI pick" : "Fallback"}
-            </span>
-          ) : null}
+      {/* ── Mood Banner ── */}
+      {current ? (
+        <div className="mood-banner">
+          <div className="mood-gradient" ref={gradientRef} />
+          <div className="mood-glow" ref={glowRef} />
+          <div className="mood-particles" ref={particlesRef} />
+          <div className="mood-overlay" />
+          <div className="mood-content">
+            <div>
+              <div className="mood-date">Today · <span>{localDateFormatted}</span></div>
+              <div className="mood-sub">
+                {userProfile?.displayName
+                  ? `Good morning, ${userProfile.displayName} — here's your look`
+                  : "Here's your look for today"}
+              </div>
+            </div>
+            <div className="mood-weather">
+              <div className="mood-temp">{current.debugScores.temperatureC.toFixed(0)}°</div>
+              <div className="mood-desc">
+                {getMoodConfig(current.debugScores.temperatureC, current.debugScores.isRaining).desc}
+                {locationSource === "device" ? "" :
+                  activeLocationLabel ? ` · ${activeLocationLabel.split(",")[0]}` : ""}
+              </div>
+              <div className="mood-wpills">
+                {current.debugScores.isRaining && <span className="mood-wpill">Carry Umbrella</span>}
+                {current.debugScores.temperatureC > 28 && <span className="mood-wpill">UV High</span>}
+                {current.debugScores.temperatureC > 25 && !current.debugScores.isRaining && <span className="mood-wpill">Humid</span>}
+                {current.debugScores.temperatureC < 10 && <span className="mood-wpill">Layer Up</span>}
+                {current.decisionSource !== "ai" && <span className="mood-wpill">Fallback</span>}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : !needs ? (
+        /* Fallback date header when no outfit yet */
+        <div className="flex items-center justify-between">
+          <span style={{
+            fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+            fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "var(--foreground)",
+          }}>
+            Today · <span style={{ color: "oklch(75% 0.18 200)" }}>{localDateFormatted}</span>
+          </span>
+        </div>
+      ) : null}
 
-      {locationError ? (
+      {/* ── Location error ── */}
+      {locationError && !needs ? (
         <section className="app-card rounded-3xl p-4">
           <div className="space-y-4">
             <div>
               <div className="text-sm text-foreground">Location unavailable</div>
               <div className="mt-1 text-sm muted-copy">{locationError}</div>
             </div>
-
             {savedLocation ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <button
-                  type="button"
-                  onClick={() => void onUseLocation(savedLocation)}
-                  className="button-secondary"
-                >
+                <button type="button" onClick={() => void onUseLocation(savedLocation)} className="button-secondary">
                   Use {formatLocationLabel(savedLocation)}
                 </button>
-                <button
-                  type="button"
-                  onClick={onClearSavedLocation}
-                  className="button-ghost"
-                >
+                <button type="button" onClick={onClearSavedLocation} className="button-ghost">
                   Clear saved location
                 </button>
               </div>
             ) : null}
-
             <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 value={searchQuery}
@@ -541,25 +680,14 @@ export default function TodayPage() {
                 placeholder="Search city"
                 className="input-base w-full"
               />
-              <button
-                type="button"
-                onClick={() => void onSearchLocation()}
-                disabled={searchLoading}
-                className="button-secondary"
-              >
+              <button type="button" onClick={() => void onSearchLocation()} disabled={searchLoading} className="button-secondary">
                 {searchLoading ? "Searching..." : "Search"}
               </button>
-              <button
-                type="button"
-                onClick={() => void loadInitialRecommendation()}
-                className="button-ghost"
-              >
+              <button type="button" onClick={() => void loadInitialRecommendation()} className="button-ghost">
                 Retry device
               </button>
             </div>
-
             {searchError ? <div className="text-sm muted-copy">{searchError}</div> : null}
-
             {searchResults.length > 0 ? (
               <div className="space-y-2">
                 {searchResults.map((result) => (
@@ -579,129 +707,305 @@ export default function TodayPage() {
         </section>
       ) : null}
 
-      {error ? (
+      {/* ── Empty wardrobe state ── */}
+      {needs ? (
+        <>
+          <section className="app-card rounded-3xl p-9 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div style={{
+                width: 56, height: 56, borderRadius: 18,
+                background: "var(--surface-subtle)", border: "1px solid var(--border)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+              }}>
+                👕
+              </div>
+              <div className="space-y-2">
+                <p className="text-lg font-bold tracking-tight text-foreground">Build your wardrobe first</p>
+                <p className="text-sm muted-copy max-w-xs mx-auto">
+                  Add at least one item in each category to receive daily outfit recommendations.
+                </p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2">
+                {needs.top && <span className="missing-tag">+ Tops missing</span>}
+                {needs.bottom && <span className="missing-tag">+ Bottoms missing</span>}
+                {needs.shoe && <span className="missing-tag">+ Shoes missing</span>}
+              </div>
+              <Link href="/library" className="button-primary">Go to wardrobe →</Link>
+            </div>
+          </section>
+
+          {userProfile !== null && !userProfile.hasTryOnPhoto ? (
+            <section className="app-card rounded-3xl p-9 text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div style={{
+                  width: 56, height: 56, borderRadius: 18,
+                  background: "var(--surface-subtle)", border: "1px solid var(--border)",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+                  color: "oklch(75% 0.18 200)",
+                }}>
+                  ✦
+                </div>
+                <div className="space-y-2">
+                  <p className="text-base font-bold tracking-tight text-foreground">AI outfit preview unavailable</p>
+                  <p className="text-sm muted-copy max-w-xs mx-auto">
+                    Upload a full-body photo on your Profile to enable AI-generated outfit previews.
+                  </p>
+                </div>
+                <Link href="/profile" className="button-primary">Go to Profile →</Link>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : error ? (
         <section className="app-card rounded-3xl p-4">
           <div className="space-y-2">
             <div className="text-sm text-danger">{error}</div>
-            {needs ? (
-              <div className="text-sm muted-copy">
-                Missing{" "}
-                {[
-                  needs.top ? "top" : null,
-                  needs.bottom ? "bottom" : null,
-                  needs.shoe ? "shoe" : null,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}{" "}
-                .{" "}
-                <Link className="text-foreground underline" href="/library">
-                  Wardrobe
-                </Link>
-              </div>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void loadInitialRecommendation()}
-              className="button-secondary"
-            >
+            <button type="button" onClick={() => void loadInitialRecommendation()} className="button-secondary">
               Retry
             </button>
           </div>
         </section>
       ) : null}
 
-      {loading || !current ? (
-        <section className="grid gap-4 md:grid-cols-3">
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="app-card shimmer rounded-3xl">
-              <div className="h-52 bg-surface-subtle sm:h-64 md:h-72" />
+      {/* ── Loading shimmer ── */}
+      {loading && !current ? (
+        <div className="outfit-hero">
+          <div className="outfit-hero-item outfit-hero-main shimmer" />
+          <div className="outfit-hero-item shimmer" />
+          <div className="outfit-hero-item shimmer" />
+        </div>
+      ) : null}
+
+      {/* ── Hero Outfit Collage ── */}
+      {current ? (
+        <div className="outfit-hero">
+          {/* Main — Top (spans 2 rows) */}
+          <div className="outfit-hero-item outfit-hero-main" onClick={() => void onShowAnother()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={current.top.photoUrl} alt={current.top.subtype} />
+            <div className="outfit-item-tag">
+              <div>
+                <div className="outfit-item-tag-category">Top</div>
+                <div className="outfit-item-tag-name">{formatEnumLabel(current.top.subtype)}</div>
+              </div>
+              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.top.colorFamily] ?? "#888" }} />
             </div>
-          ))}
-        </section>
-      ) : (
-        <>
-          <section className="grid gap-4 md:grid-cols-3">
-            {[
-              { label: "Top", item: current.top },
-              { label: "Bottom", item: current.bottom },
-              { label: "Shoes", item: current.shoe },
-            ].map((entry) => (
-              <article key={entry.label} className="app-card overflow-hidden rounded-3xl">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={entry.item.photoUrl}
-                  alt={entry.item.subtype}
-                  className="h-52 w-full object-cover sm:h-64 md:h-72"
-                />
-                <div className="space-y-2 p-4">
-                  <div className="text-xs uppercase tracking-[0.12em] muted-copy">{entry.label}</div>
-                  <div className="text-base font-medium text-foreground">
-                    {formatEnumLabel(entry.item.subtype)}
+            <div className="outfit-swap-hint">↔ Another look</div>
+          </div>
+          {/* Bottom */}
+          <div className="outfit-hero-item" onClick={() => void onShowAnother()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={current.bottom.photoUrl} alt={current.bottom.subtype} />
+            <div className="outfit-item-tag">
+              <div>
+                <div className="outfit-item-tag-category">Bottom</div>
+                <div className="outfit-item-tag-name">{formatEnumLabel(current.bottom.subtype)}</div>
+              </div>
+              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.bottom.colorFamily] ?? "#888" }} />
+            </div>
+            <div className="outfit-swap-hint">↔ Another look</div>
+          </div>
+          {/* Shoes */}
+          <div className="outfit-hero-item" onClick={() => void onShowAnother()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={current.shoe.photoUrl} alt={current.shoe.subtype} />
+            <div className="outfit-item-tag">
+              <div>
+                <div className="outfit-item-tag-category">Shoes</div>
+                <div className="outfit-item-tag-name">{formatEnumLabel(current.shoe.subtype)}</div>
+              </div>
+              <div className="outfit-item-swatch" style={{ background: COLOR_SWATCHES[current.shoe.colorFamily] ?? "#888" }} />
+            </div>
+            <div className="outfit-swap-hint">↔ Another look</div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ── Fit Score Ring ── */}
+      {current ? (
+        <div className="score-ring-section">
+          <div className="score-ring-wrap">
+            <svg width="108" height="108" viewBox="0 0 108 108">
+              <circle className="ring-track" cx="54" cy="54" r="46" />
+              <circle
+                className="ring-fill"
+                cx="54" cy="54" r="46"
+                style={{ strokeDashoffset: scoreAnimated ? 289 - (289 * current.totalScore) : 289 }}
+              />
+            </svg>
+            <div className="score-ring-center">
+              <div className="score-ring-num">{scoreDisplay}</div>
+              <div className="score-ring-label">fit score</div>
+            </div>
+          </div>
+          <div className="score-ring-details">
+            <div className="score-ring-title">
+              {userProfile?.displayName ? `Looking sharp, ${userProfile.displayName} ✦` : "Looking sharp ✦"}
+            </div>
+            <div className="score-mini-bars">
+              {[
+                { label: "Weather", value: current.debugScores.weatherScore },
+                { label: "Color harmony", value: current.debugScores.colorHarmonyScore, warm: true },
+                { label: "Style cohesion", value: current.debugScores.styleConsistencyScore },
+                { label: "Formality", value: current.debugScores.formalityAlignmentScore },
+              ].map(({ label, value, warm }) => (
+                <div key={label} className="score-mini-row">
+                  <span className="score-mini-label">{label}</span>
+                  <div className="score-mini-track">
+                    <div
+                      className={`score-mini-fill${warm ? " warm" : ""}`}
+                      style={{ transform: scoreAnimated ? `scaleX(${value})` : "scaleX(0)" }}
+                    />
                   </div>
+                  <span className="score-mini-val">{Math.round(value * 100)}%</span>
                 </div>
-              </article>
-            ))}
-          </section>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
-          {userProfile !== null ? (
-            <TryOnPreview
-              outfit={{ top: current.top, bottom: current.bottom, shoe: current.shoe }}
-              hasTryOnPhoto={userProfile.hasTryOnPhoto}
-              displayName={userProfile.displayName}
-            />
-          ) : null}
-
-          <section className="app-card rounded-3xl p-4">
-            <div className="space-y-4">
-              <div className="text-sm text-foreground">{current.explanation}</div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <button
-                  onClick={onMarkWorn}
-                  disabled={marked}
-                  className="button-primary w-full"
-                >
-                  {marked ? "Saved" : "Mark as worn"}
-                </button>
-                <button
-                  onClick={onShowAnother}
-                  disabled={loading}
-                  className="button-secondary w-full"
-                >
-                  Another look
-                </button>
+      {/* ── AI Chat Card ── */}
+      {current && userProfile !== null ? (
+        <div className="ai-chat-card">
+          {/* Header */}
+          <div className="ai-chat-header">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="ai-orb">✦</div>
+              <div>
+                <div style={{ fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)", fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>
+                  Stylist AI
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 300 }}>
+                  Personalized reasoning
+                </div>
               </div>
             </div>
-          </section>
+            {userProfile.hasTryOnPhoto ? (
+              <button
+                type="button"
+                className="btn-ootd"
+                onClick={() => tryOnRef.current?.generate()}
+              >
+                OOTD ↗
+              </button>
+            ) : (
+              <Link
+                href="/profile"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  background: "oklch(75% 0.18 200)", color: "oklch(9% 0.008 240)",
+                  fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                  fontSize: 11, fontWeight: 700, padding: "7px 14px", borderRadius: 100,
+                  letterSpacing: "0.06em", textTransform: "uppercase", textDecoration: "none",
+                }}
+              >
+                Set up
+              </Link>
+            )}
+          </div>
 
-          <section className="app-card rounded-3xl p-4">
+          {/* Embedded TryOnPreview (only shows when loading/success/fallback) */}
+          <TryOnPreview
+            ref={tryOnRef}
+            outfit={{ top: current.top, bottom: current.bottom, shoe: current.shoe }}
+            hasTryOnPhoto={userProfile.hasTryOnPhoto}
+            displayName={userProfile.displayName}
+            embedded
+          />
+
+          {/* Chat bubble */}
+          <div style={{ padding: "18px 20px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: 9,
+                background: "oklch(75% 0.18 200 / 0.1)",
+                border: "1px solid oklch(75% 0.18 200 / 0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 13, flexShrink: 0, marginTop: 14,
+              }}>✦</div>
+              <div className="ai-chat-bubble">
+                {chatPhase === "dots" ? (
+                  <div className="typing-dots">
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                    <div className="typing-dot" />
+                  </div>
+                ) : (
+                  <>
+                    {chatText}
+                    <span className={`ai-chat-cursor${chatPhase === "done" ? " done" : ""}`} />
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Action row */}
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10,
+            padding: "16px 20px 20px", borderTop: "1px solid var(--border)",
+          }}>
             <button
               type="button"
-              onClick={() => setShowDetails((prev) => !prev)}
-              className="flex w-full items-center justify-between text-sm text-foreground"
+              onClick={() => void onMarkWorn()}
+              disabled={marked}
+              className="button-primary"
+              style={{
+                borderRadius: 100, padding: "13px 20px", fontSize: 14, fontWeight: 600,
+                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+              }}
             >
-              <span>Why this works</span>
-              <span className="muted-copy">{showDetails ? "Hide" : "Show"}</span>
+              {marked ? "Worn today ✓" : "Mark as worn"}
             </button>
+            <button
+              type="button"
+              onClick={() => void onShowAnother()}
+              disabled={loading}
+              className="button-secondary"
+              style={{
+                borderRadius: 100, padding: "13px 20px", fontSize: 14, fontWeight: 600,
+                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+              }}
+            >
+              Another look
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-            {showDetails ? (
-              <div className="mt-4">
-                <DetailRow
-                  label="Decision"
-                  value={current.decisionSource === "ai" ? "Gemini rerank" : "Algorithm fallback"}
-                />
-                {current.decisionSource === "ai" && current.decisionConfidence !== null ? (
-                  <DetailRow label="Confidence" value={current.decisionConfidence.toFixed(2)} />
-                ) : null}
-                <DetailRow label="Weather" value={current.debugScores.weatherScore.toFixed(2)} />
-                <DetailRow label="Color" value={current.debugScores.colorHarmonyScore.toFixed(2)} />
-                <DetailRow label="Style" value={current.debugScores.styleConsistencyScore.toFixed(2)} />
-                <DetailRow label="Formality" value={current.debugScores.formalityAlignmentScore.toFixed(2)} />
-                <DetailRow label="Pattern" value={current.debugScores.patternBalanceScore.toFixed(2)} />
+      {/* ── Week History ── */}
+      {current ? (
+        <div className="week-section">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <span style={{
+              fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+              fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em",
+            }}>
+              This week
+            </span>
+            {streak > 0 && (
+              <span style={{
+                display: "flex", alignItems: "center", gap: 5,
+                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+                fontSize: 12, fontWeight: 700, color: "var(--warning)",
+              }}>
+                🔥 {streak}-day streak
+              </span>
+            )}
+          </div>
+          <div className="week-days">
+            {weekDays.map((day) => (
+              <div key={day.key} className="week-day">
+                <div className="week-day-label">{day.label}</div>
+                <div className={`week-dot-wrap ${day.state}`}>
+                  <div className="week-dot" />
+                </div>
               </div>
-            ) : null}
-          </section>
-        </>
-      )}
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

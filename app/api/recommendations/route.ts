@@ -50,10 +50,22 @@ export async function GET(req: NextRequest) {
   const { lat, lon, date, offset, limit } = parsed.data;
   const dateKey = date ?? getServerDateKey();
 
-  const [tops, bottoms, shoes] = await Promise.all([
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "TOP", analysisStatus: { not: "PENDING" } } }),
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "BOTTOM", analysisStatus: { not: "PENDING" } } }),
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "SHOE", analysisStatus: { not: "PENDING" } } }),
+  const todayStart = dateKeyToUtcStart(dateKey);
+  const cutoff = new Date(todayStart);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 3);
+
+  const [[tops, bottoms, shoes], weatherResult, recent] = await Promise.all([
+    Promise.all([
+      prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "TOP", analysisStatus: { not: "PENDING" } } }),
+      prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "BOTTOM", analysisStatus: { not: "PENDING" } } }),
+      prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "SHOE", analysisStatus: { not: "PENDING" } } }),
+    ]),
+    fetchWeather(lat, lon).catch(() => null),
+    prisma.outfitHistory.findMany({
+      where: { userId: currentUser.appUser.id, date: { gte: cutoff, lt: todayStart } },
+      take: 50,
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
   if (!tops.length || !bottoms.length || !shoes.length) {
@@ -70,31 +82,13 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let weather: Awaited<ReturnType<typeof fetchWeather>>;
-  try {
-    weather = await fetchWeather(lat, lon);
-  } catch {
+  if (!weatherResult) {
     return NextResponse.json({ error: "Failed to fetch weather." }, { status: 502 });
   }
 
+  const weather = weatherResult;
   const temperatureC = Math.round(weather.temperatureC * 2) / 2;
   const precipitationMm = Math.round(weather.precipitationMm * 10) / 10;
-
-  const todayStart = dateKeyToUtcStart(dateKey);
-  const cutoff = new Date(todayStart);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 3);
-
-  const recent = await prisma.outfitHistory.findMany({
-    where: {
-      userId: currentUser.appUser.id,
-      date: {
-        gte: cutoff,
-        lt: todayStart,
-      },
-    },
-    take: 50,
-    orderBy: { createdAt: "desc" },
-  });
 
   const wornItemIds = new Set<string>();
   for (const outfit of recent) {

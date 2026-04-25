@@ -40,6 +40,12 @@ export async function syncAuthUser(user: SupabaseUser) {
   });
 }
 
+export async function syncAuthUserWithCreationFlag(user: SupabaseUser) {
+  const existing = await prisma.user.findUnique({ where: { id: user.id }, select: { id: true } });
+  const appUser = await syncAuthUser(user);
+  return { appUser, wasCreated: !existing };
+}
+
 export async function getCurrentUser() {
   const supabase = await createServerSupabaseClient();
   const {
