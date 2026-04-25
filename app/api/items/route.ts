@@ -137,7 +137,7 @@ async function resolveUploadMetadata(args: {
   const shouldAttemptAi = isAiClassificationEnabled() && (needsAiForKind || needsAiForAttributes);
 
   if (!shouldAttemptAi) {
-    if (!manualKind || !manualSubtype) {
+    if (!manualKind) {
       console.info("[gemini:classification] skipped", {
         reason: getAiClassificationDisabledReason() || "Missing manual kind/subtype and AI classification disabled",
         manualKind,
@@ -146,13 +146,18 @@ async function resolveUploadMetadata(args: {
       throw new Error("AI could not infer kind and subtype. Add them in optional details or enable AI classification.");
     }
 
+    // When kind is known but subtype isn't (e.g. onboarding), fall back to the
+    // default subtype for that kind rather than throwing — AI would have inferred
+    // it, but classification is disabled.
+    const resolvedSubtype = manualSubtype ?? getDefaultSubtypeForKind(manualKind);
+
     return {
       kind: manualKind,
-      subtype: manualSubtype,
+      subtype: resolvedSubtype,
       analysisStatus: hasUnknownAttributes(manualAttributes) ? "SKIPPED" : "READY",
       metadataSource: "MANUAL",
       visualSummary: buildFallbackVisualSummary({
-        subtype: manualSubtype,
+        subtype: resolvedSubtype,
         attributes: manualAttributes,
       }),
       analysisConfidence: null,

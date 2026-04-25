@@ -15,10 +15,18 @@ type CachedWeather = { result: WeatherResult; expiresAt: number };
 const weatherCache = new Map<string, CachedWeather>();
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+function evictExpiredWeatherEntries() {
+  const now = Date.now();
+  for (const [key, entry] of weatherCache) {
+    if (entry.expiresAt <= now) weatherCache.delete(key);
+  }
+}
+
 export async function fetchWeather(lat: number, lon: number): Promise<WeatherResult> {
+  evictExpiredWeatherEntries(); // sweep all stale entries on every fetch
   const cacheKey = `${lat.toFixed(2)}_${lon.toFixed(2)}`;
   const cached = weatherCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) return cached.result;
+  if (cached) return cached.result; // guaranteed fresh after sweep
 
   const url = new URL("https://api.open-meteo.com/v1/forecast");
   url.searchParams.set("latitude", lat.toString());
