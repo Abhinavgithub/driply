@@ -7,12 +7,6 @@ import { useRouter } from "next/navigation";
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 10 * 1024 * 1024;
 
-// Default subtypes sent when AI classification is disabled and the API requires subtype
-const DEFAULT_SUBTYPE_BY_KIND: Record<string, string> = {
-  TOP: "tshirt",
-  BOTTOM: "jeans",
-  SHOE: "sneakers",
-};
 
 type ItemKind = "TOP" | "BOTTOM" | "SHOE";
 type WizardStep = 1 | 2;
@@ -160,7 +154,6 @@ export default function OnboardingPage() {
       const formData = new FormData();
       formData.append("photo", file);
       formData.set("kind", kind);
-      formData.set("subtype", DEFAULT_SUBTYPE_BY_KIND[kind]);
       const res = await fetch("/api/items", { method: "POST", body: formData });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Upload failed.");
