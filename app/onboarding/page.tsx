@@ -126,6 +126,15 @@ export default function OnboardingPage() {
     })();
   }, []);
 
+  // Revoke all blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      Object.values(previews).forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      if (tryOnPreview) URL.revokeObjectURL(tryOnPreview);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function onItemFileSelected(kind: ItemKind, file: File) {
     const err = validateImageFile(file);
     if (err) {
