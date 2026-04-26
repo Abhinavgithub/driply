@@ -32,7 +32,7 @@ function pageMeta(pathname: string) {
   if (pathname.startsWith("/profile")) {
     return {
       title: "Profile",
-      showHeading: true,
+      showHeading: false,
     };
   }
 
@@ -225,7 +225,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       }}
                       className={`rounded-full px-3.5 py-1.5 transition ${
                         active
-                          ? "bg-surface border border-border text-foreground"
+                          ? "bg-surface border border-border text-[oklch(75%_0.18_200)]"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >

@@ -4,12 +4,18 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "r
 
 import { fetchJson } from "@/lib/fetch-utils";
 import { validateImageFile } from "@/lib/file-utils";
+import {
+  QUIZ_QUESTIONS,
+  parseStylePreferences,
+  type StylePreferences,
+} from "@/lib/style-preferences";
 
 type ProfileData = {
   displayName: string | null;
   avatarUrl: string | null;
   aiTryOnPhotoUrl: string | null;
   hasTryOnPhoto: boolean;
+  stylePreferences: StylePreferences | null;
 };
 
 function AvatarPlaceholder({ letter }: { letter?: string }) {
@@ -51,6 +57,10 @@ export default function ProfilePage() {
   const [tryOnError, setTryOnError] = useState<string | null>(null);
   const [tryOnLandscapeWarn, setTryOnLandscapeWarn] = useState(false);
 
+  const [localPrefs, setLocalPrefs] = useState<Partial<StylePreferences>>({});
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prefsSuccess, setPrefsSuccess] = useState(false);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const tryOnInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +70,7 @@ export default function ProfilePage() {
         const data = await fetchJson<ProfileData>("/api/profile");
         setProfile(data);
         setDisplayName(data.displayName ?? "");
+        setLocalPrefs(data.stylePreferences ?? {});
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -67,6 +78,12 @@ export default function ProfilePage() {
       }
     })();
   }, []);
+
+  // Derived: save button appears only when all 5 answers are filled and at least one differs from saved
+  const isComplete = QUIZ_QUESTIONS.every((q) => localPrefs[q.field] !== undefined);
+  const isDirty =
+    isComplete &&
+    QUIZ_QUESTIONS.some((q) => localPrefs[q.field] !== (profile?.stylePreferences?.[q.field] ?? undefined));
 
   function onAvatarChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -120,12 +137,13 @@ export default function ProfilePage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Save failed.");
 
-      setProfile({
+      setProfile((prev) => ({
+        ...prev!,
         displayName: json.displayName,
         avatarUrl: json.avatarUrl,
         aiTryOnPhotoUrl: json.aiTryOnPhotoUrl,
         hasTryOnPhoto: json.hasTryOnPhoto,
-      });
+      }));
       setAvatarFile(null);
       setTryOnFile(null);
       setSuccess(true);
@@ -134,6 +152,25 @@ export default function ProfilePage() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onSavePrefs(prefs: StylePreferences) {
+    setPrefsSaving(true);
+    try {
+      const formData = new FormData();
+      formData.set("stylePreferences", JSON.stringify(prefs));
+      const res = await fetch("/api/profile", { method: "PATCH", body: formData });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Save failed.");
+      // Update saved state so isDirty becomes false
+      setProfile((prev) => ({ ...prev!, stylePreferences: parseStylePreferences(prefs) }));
+      setPrefsSuccess(true);
+      setTimeout(() => setPrefsSuccess(false), 3000);
+    } catch {
+      // Non-fatal — leave local state so user can retry
+    } finally {
+      setPrefsSaving(false);
     }
   }
 
@@ -161,52 +198,49 @@ export default function ProfilePage() {
         </section>
       ) : null}
 
-      {/* Display name */}
+      {/* Account — avatar + display name side by side */}
       <section className="app-card rounded-3xl p-4">
         <h2 className="mb-4 text-base font-medium text-foreground">Account</h2>
-        <label className="field-label">
-          <span>Display name</span>
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Your name"
-            maxLength={80}
-            className="input-base"
-          />
-        </label>
-      </section>
-
-      {/* Profile picture */}
-      <section className="app-card rounded-3xl p-4">
-        <h2 className="mb-1 text-base font-medium text-foreground">Profile picture</h2>
-        <p className="mb-4 text-sm muted-copy">Shown in the app navigation and your account.</p>
-
-        <div className="flex items-center gap-5">
+        <div className="flex items-start gap-5">
+          {/* Avatar */}
           <button
             type="button"
             onClick={() => avatarInputRef.current?.click()}
             aria-label="Upload profile picture"
-            className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
+            className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
           >
             {effectiveAvatarSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={effectiveAvatarSrc} alt="Profile picture preview" className="h-full w-full object-cover" />
+              <img src={effectiveAvatarSrc} alt="Profile picture" className="h-full w-full object-cover" />
             ) : (
               <AvatarPlaceholder letter={displayInitial} />
             )}
           </button>
 
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={() => avatarInputRef.current?.click()}
-              className="button-secondary"
-            >
-              {effectiveAvatarSrc ? "Change photo" : "Upload photo"}
-            </button>
-            <p className="text-xs muted-copy">JPG, PNG, or WEBP · Max 10 MB</p>
-            {avatarError ? <p className="text-xs text-danger">{avatarError}</p> : null}
+          {/* Name + change photo */}
+          <div className="flex flex-1 flex-col gap-3">
+            <label className="field-label">
+              <span>Display name</span>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
+                maxLength={80}
+                className="input-base"
+              />
+            </label>
+            <div>
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                className="button-primary"
+              >
+                {effectiveAvatarSrc ? "Change photo" : "Upload photo"}
+              </button>
+              <p className="mt-1 text-xs muted-copy">JPG, PNG, or WEBP · Max 10 MB</p>
+              {avatarError ? <p className="mt-1 text-xs text-danger">{avatarError}</p> : null}
+            </div>
           </div>
         </div>
 
@@ -217,6 +251,54 @@ export default function ProfilePage() {
           className="sr-only"
           onChange={onAvatarChange}
         />
+      </section>
+
+      {/* Style Preferences — inside form for visual ordering; type="button" prevents submit */}
+      <section className="app-card rounded-3xl p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-medium text-foreground">Style preferences</h2>
+          {prefsSuccess ? <span className="text-xs muted-copy">Saved</span> : null}
+        </div>
+
+        <div className="space-y-3">
+          {QUIZ_QUESTIONS.map((q) => (
+            <div key={q.field} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <span className="text-xs font-medium muted-copy sm:w-24 sm:shrink-0 sm:font-normal">{q.shortLabel}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {q.options.map((option) => {
+                  const isSelected = localPrefs[q.field] === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setLocalPrefs((prev) => ({ ...prev, [q.field]: option.value }))}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        isSelected
+                          ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
+                          : "border-border font-medium text-foreground hover:border-foreground/50"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {isDirty ? (
+          <div className="mt-4 flex justify-end">
+            <button
+              type="button"
+              disabled={prefsSaving}
+              onClick={() => void onSavePrefs(localPrefs as StylePreferences)}
+              className="button-primary"
+            >
+              {prefsSaving ? "Saving..." : "Save preferences"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {/* AI try-on photo */}
@@ -268,7 +350,7 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={() => tryOnInputRef.current?.click()}
-            className="button-secondary"
+            className="button-primary"
           >
             {profile?.hasTryOnPhoto || tryOnFile ? "Change photo" : "Upload full-body photo"}
           </button>
