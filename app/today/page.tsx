@@ -356,6 +356,25 @@ export default function TodayPage() {
     ? `driply-saved-location:${authUserId}`
     : null;
 
+  const mood = useMemo(
+    () =>
+      current
+        ? getMoodConfig(
+            current.debugScores.temperatureC,
+            current.debugScores.isRaining,
+          )
+        : null,
+    [current],
+  );
+
+  const tryOnOutfit = useMemo(
+    () =>
+      current
+        ? { top: current.top, bottom: current.bottom, shoe: current.shoe }
+        : null,
+    [current],
+  );
+
   // Week history derived state
   const weekDays = useMemo(() => {
     const today = new Date();
@@ -473,38 +492,45 @@ export default function TodayPage() {
     setChatText('');
     setChatPhase('dots');
     const message = current.aiReason ?? current.explanation;
-    let cleanupInterval: ReturnType<typeof setInterval> | null = null;
+    let rafId: number | null = null;
+    const MS_PER_CHAR = 22;
     const timeout = setTimeout(() => {
       setChatPhase('typing');
       let i = 0;
-      cleanupInterval = setInterval(() => {
-        i++;
-        setChatText(message.slice(0, i));
-        if (i >= message.length) {
-          if (cleanupInterval) clearInterval(cleanupInterval);
+      let startTime: number | null = null;
+      const tick = (now: DOMHighResTimeStamp) => {
+        if (startTime === null) startTime = now;
+        const target = Math.min(
+          Math.floor((now - startTime) / MS_PER_CHAR),
+          message.length,
+        );
+        if (target > i) {
+          i = target;
+          setChatText(message.slice(0, i));
+        }
+        if (i < message.length) {
+          rafId = requestAnimationFrame(tick);
+        } else {
           setChatPhase('done');
         }
-      }, 22);
+      };
+      rafId = requestAnimationFrame(tick);
     }, 1600);
     return () => {
       clearTimeout(timeout);
-      if (cleanupInterval) clearInterval(cleanupInterval);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
   }, [current]);
 
   // Mood banner particles
   useEffect(() => {
     if (
-      !current ||
+      !mood ||
       !particlesRef.current ||
       !gradientRef.current ||
       !glowRef.current
     )
       return;
-    const mood = getMoodConfig(
-      current.debugScores.temperatureC,
-      current.debugScores.isRaining,
-    );
     gradientRef.current.style.background = mood.gradient;
     glowRef.current.style.background = mood.glow;
     const container = particlesRef.current;
@@ -515,7 +541,7 @@ export default function TodayPage() {
       p.style.cssText = `left:${Math.random() * 100}%;bottom:${Math.random() * 40}%;width:${4 + Math.random() * 6}px;height:${4 + Math.random() * 6}px;background:${mood.particleColor};--dur:${3 + Math.random() * 4}s;--delay:${Math.random() * 4}s;`;
       container.appendChild(p);
     }
-  }, [current]);
+  }, [mood]);
 
   const loadRecommendationsForCoordinates = useCallback(
     async (
@@ -742,12 +768,7 @@ export default function TodayPage() {
                 {current.debugScores.temperatureC.toFixed(0)}°
               </div>
               <div className='mood-desc'>
-                {
-                  getMoodConfig(
-                    current.debugScores.temperatureC,
-                    current.debugScores.isRaining,
-                  ).desc
-                }
+                {mood?.desc}
                 {locationSource === 'device'
                   ? ''
                   : activeLocationLabel
@@ -1188,17 +1209,15 @@ export default function TodayPage() {
           </div>
 
           {/* Embedded TryOnPreview (only shows when loading/success/fallback) */}
-          <TryOnPreview
-            ref={tryOnRef}
-            outfit={{
-              top: current.top,
-              bottom: current.bottom,
-              shoe: current.shoe,
-            }}
-            hasTryOnPhoto={userProfile.hasTryOnPhoto}
-            displayName={userProfile.displayName}
-            embedded
-          />
+          {tryOnOutfit && (
+            <TryOnPreview
+              ref={tryOnRef}
+              outfit={tryOnOutfit}
+              hasTryOnPhoto={userProfile.hasTryOnPhoto}
+              displayName={userProfile.displayName}
+              embedded
+            />
+          )}
 
           {/* Chat bubble */}
           <div style={{ padding: '18px 20px' }}>
