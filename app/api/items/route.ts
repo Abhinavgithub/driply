@@ -269,7 +269,6 @@ export async function GET() {
   const items = await prisma.item.findMany({
     where: { userId: currentUser.appUser.id },
     orderBy: { createdAt: "desc" },
-    take: 200,
   });
 
   return NextResponse.json({ items: await attachSignedPhotoUrls(items) });

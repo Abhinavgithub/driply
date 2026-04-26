@@ -493,12 +493,21 @@ export default function TodayPage() {
     setChatPhase('dots');
     const message = current.aiReason ?? current.explanation;
     let rafId: number | null = null;
+    const MS_PER_CHAR = 22;
     const timeout = setTimeout(() => {
       setChatPhase('typing');
       let i = 0;
-      const tick = () => {
-        i = Math.min(i + 2, message.length);
-        setChatText(message.slice(0, i));
+      let startTime: number | null = null;
+      const tick = (now: DOMHighResTimeStamp) => {
+        if (startTime === null) startTime = now;
+        const target = Math.min(
+          Math.floor((now - startTime) / MS_PER_CHAR),
+          message.length,
+        );
+        if (target > i) {
+          i = target;
+          setChatText(message.slice(0, i));
+        }
         if (i < message.length) {
           rafId = requestAnimationFrame(tick);
         } else {
