@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { dateKeyToUtcStart } from "@/lib/date-utils";
 import { prisma } from "@/lib/prisma";
 
@@ -43,6 +44,10 @@ export async function POST(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!checkRateLimit(`outfits:post:${currentUser.appUser.id}`, 30)) {
+    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
   }
 
   const json = await req.json().catch(() => null);
