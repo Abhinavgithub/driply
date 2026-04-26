@@ -81,6 +81,7 @@ model User {
   uploadedAvatarUrl    String?
   aiTryOnPhotoUrl      String?
   aiTryOnPhotoMimeType String?
+  stylePreferences     Json?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   items                Item[]

@@ -7,6 +7,7 @@ import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
+import { parseStylePreferences } from "@/lib/style-preferences";
 import { getServerDateKey, dateKeyToUtcStart } from "@/lib/date-utils";
 
 const QuerySchema = z.object({
@@ -41,6 +42,7 @@ export const GET = withAuth(
 
   const { lat, lon, date, offset, limit } = parsed.data;
   const dateKey = date ?? getServerDateKey();
+  const stylePreferences = parseStylePreferences(currentUser.appUser.stylePreferences);
 
   const todayStart = dateKeyToUtcStart(dateKey);
   const cutoff = new Date(todayStart);
@@ -99,6 +101,7 @@ export const GET = withAuth(
     wornItemIds,
     offset: 0,
     limit: offset === 0 ? Math.max(limit, 6) : offset + limit,
+    stylePreferences,
   });
 
   const decision =

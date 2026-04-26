@@ -4,6 +4,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api-guard";
 import { validateImageBlob } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
+import { parseStylePreferences } from "@/lib/style-preferences";
 import {
   deleteProfilePhoto,
   getSignedProfilePhotoUrl,
@@ -23,6 +24,7 @@ export const GET = withAuth(async (currentUser) => {
       uploadedAvatarUrl: true,
       aiTryOnPhotoUrl: true,
       aiTryOnPhotoMimeType: true,
+      stylePreferences: true,
     },
   });
 
@@ -36,6 +38,7 @@ export const GET = withAuth(async (currentUser) => {
     avatarUrl: avatarSignedUrl,
     aiTryOnPhotoUrl: tryOnSignedUrl,
     hasTryOnPhoto: Boolean(user?.aiTryOnPhotoUrl),
+    stylePreferences: parseStylePreferences(user?.stylePreferences),
   });
 });
 
@@ -53,6 +56,7 @@ export const PATCH = withAuth(
   const rawDisplayName = formData.get("displayName");
   const rawAvatar = formData.get("avatar");
   const rawTryOnPhoto = formData.get("aiTryOnPhoto");
+  const rawStylePreferences = formData.get("stylePreferences");
 
   // Validate display name if provided
   let displayName: string | undefined;
@@ -111,6 +115,21 @@ export const PATCH = withAuth(
     if (existingUser?.aiTryOnPhotoUrl && existingUser.aiTryOnPhotoUrl !== path) {
       await deleteProfilePhoto(existingUser.aiTryOnPhotoUrl);
     }
+  }
+
+  // Handle style preferences
+  if (typeof rawStylePreferences === "string") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawStylePreferences);
+    } catch {
+      return NextResponse.json({ error: "Invalid style preferences JSON." }, { status: 400 });
+    }
+    const validated = parseStylePreferences(parsed);
+    if (!validated) {
+      return NextResponse.json({ error: "Invalid style preferences." }, { status: 400 });
+    }
+    updates.stylePreferences = validated;
   }
 
   if (Object.keys(updates).length === 0) {

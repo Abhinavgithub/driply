@@ -5,9 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { validateImageFile } from "@/lib/file-utils";
+import { QUIZ_QUESTIONS, type StylePreferences } from "@/lib/style-preferences";
 
 type ItemKind = "TOP" | "BOTTOM" | "SHOE";
-type WizardStep = 1 | 2;
+type WizardStep = 0 | 1 | 2;
 type ItemCounts = { TOP: number; BOTTOM: number; SHOE: number };
 type Previews = { TOP: string | null; BOTTOM: string | null; SHOE: string | null };
 
@@ -64,7 +65,9 @@ function CloseIcon() {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState<WizardStep>(1);
+  const [step, setStep] = useState<WizardStep>(0);
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<Partial<StylePreferences>>({});
   const [counts, setCounts] = useState<ItemCounts>({ TOP: 0, BOTTOM: 0, SHOE: 0 });
   const [previews, setPreviews] = useState<Previews>({ TOP: null, BOTTOM: null, SHOE: null });
   const [uploading, setUploading] = useState<Partial<Record<ItemKind, boolean>>>({});
@@ -125,6 +128,30 @@ export default function OnboardingPage() {
       if (tryOnPreviewRef.current) URL.revokeObjectURL(tryOnPreviewRef.current);
     };
   }, []);
+
+  async function saveQuizAnswers(answers: StylePreferences) {
+    try {
+      const formData = new FormData();
+      formData.set("stylePreferences", JSON.stringify(answers));
+      await fetch("/api/profile", { method: "PATCH", body: formData });
+    } catch {
+      // Non-fatal — quiz save failure should not block onboarding
+    }
+  }
+
+  async function onQuizOptionSelected(value: string) {
+    const question = QUIZ_QUESTIONS[quizStep];
+    const updatedAnswers = { ...quizAnswers, [question.field]: value };
+    setQuizAnswers(updatedAnswers);
+
+    if (quizStep < QUIZ_QUESTIONS.length - 1) {
+      setQuizStep(quizStep + 1);
+    } else {
+      // All questions answered — save and advance to wardrobe upload
+      await saveQuizAnswers(updatedAnswers as StylePreferences);
+      setStep(1);
+    }
+  }
 
   async function onItemFileSelected(kind: ItemKind, file: File) {
     const err = validateImageFile(file);
@@ -224,9 +251,14 @@ export default function OnboardingPage() {
     { kind: "SHOE", label: "Shoes" },
   ];
 
+  // Progress: step 0 = quiz (step 1 of 3), step 1 = wardrobe (step 2 of 3), step 2 = try-on (step 3 of 3)
+  const isStep0Done = step > 0;
+  const isStep0Active = step === 0;
   const isStep1Done = step > 1;
   const isStep1Active = step === 1;
   const isStep2Active = step === 2;
+
+  const currentQuestion = QUIZ_QUESTIONS[quizStep];
 
   return (
     <div className="lp-auth-page">
@@ -258,6 +290,9 @@ export default function OnboardingPage() {
           {!showSuccess && (
             <div className="lp-onboarding-progress">
               <div className="lp-onboarding-progress-steps">
+                <div className={`lp-onboarding-progress-step${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}>
+                  <div className="lp-onboarding-progress-fill" />
+                </div>
                 <div className={`lp-onboarding-progress-step${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}>
                   <div className="lp-onboarding-progress-fill" />
                 </div>
@@ -266,6 +301,9 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="lp-onboarding-progress-labels">
+                <div className={`lp-onboarding-progress-label${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}>
+                  Your style
+                </div>
                 <div className={`lp-onboarding-progress-label${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}>
                   Your wardrobe
                 </div>
@@ -297,11 +335,105 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {/* Step 0 — Style Quiz */}
+          {!showSuccess && step === 0 && (
+            <>
+              <div className="lp-onboarding-body">
+                <div className="lp-onboarding-eyebrow">Step 1 of 3 · Question {quizStep + 1} of {QUIZ_QUESTIONS.length}</div>
+                <h2 className="lp-onboarding-title">{currentQuestion.question}</h2>
+                <p className="lp-onboarding-sub">
+                  Select one — your answers personalise your daily outfit recommendations.
+                </p>
+
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: currentQuestion.options.length <= 3 ? "1fr" : "1fr 1fr",
+                  gap: 10,
+                  marginTop: 8,
+                  marginBottom: 24,
+                }}>
+                  {currentQuestion.options.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => void onQuizOptionSelected(option.value)}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 4,
+                        padding: "14px 16px",
+                        borderRadius: 12,
+                        border: "1.5px solid var(--lp-border)",
+                        background: "var(--lp-card-bg, var(--lp-surface))",
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "border-color 0.15s, background 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--lp-accent)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--lp-border)";
+                      }}
+                    >
+                      <span style={{ fontSize: 14, fontWeight: 500, color: "var(--lp-text)" }}>
+                        {option.label}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--lp-muted)" }}>
+                        {option.hint}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Quiz sub-progress dots */}
+                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}>
+                  {QUIZ_QUESTIONS.map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: i === quizStep
+                          ? "var(--lp-accent)"
+                          : i < quizStep
+                            ? "var(--lp-accent)"
+                            : "var(--lp-border)",
+                        opacity: i < quizStep ? 0.5 : 1,
+                        transition: "background 0.2s",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="lp-onboarding-note">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "var(--lp-muted)",
+                    fontSize: 13,
+                    textDecoration: "underline",
+                    padding: 0,
+                  }}
+                >
+                  Skip quiz
+                </button>
+              </div>
+            </>
+          )}
+
           {/* Step 1 — Wardrobe */}
           {!showSuccess && step === 1 && (
             <>
               <div className="lp-onboarding-body">
-                <div className="lp-onboarding-eyebrow">Step 1 of 2</div>
+                <div className="lp-onboarding-eyebrow">Step 2 of 3</div>
                 <h2 className="lp-onboarding-title">Add your wardrobe</h2>
                 <p className="lp-onboarding-sub">
                   Upload at least one photo per category to get daily outfit recommendations.
@@ -381,6 +513,15 @@ export default function OnboardingPage() {
                 <div className="lp-onboarding-btn-row">
                   <button
                     type="button"
+                    onClick={() => { setStep(0); setQuizStep(0); }}
+                    disabled={isAnyUploading}
+                    className="lp-onboarding-btn-back"
+                  >
+                    <ArrowLeftIcon />
+                    Back
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setStep(2)}
                     disabled={isAnyUploading}
                     className="lp-onboarding-btn-primary"
@@ -402,7 +543,7 @@ export default function OnboardingPage() {
             <>
               <div className="lp-onboarding-body">
                 <div className="lp-onboarding-eyebrow">
-                  Step 2 of 2
+                  Step 3 of 3
                   <span style={{ marginLeft: 4, opacity: 0.6, fontWeight: 400, letterSpacing: "0.04em", textTransform: "none" }}>
                     · Optional
                   </span>

@@ -8,6 +8,8 @@ import type {
   WarmthLevel,
 } from "@prisma/client";
 
+import type { StylePreferences } from "@/lib/style-preferences";
+
 export type ItemWithAttributes = Pick<
   Item,
   | "id"
@@ -56,6 +58,43 @@ const STYLE_WEIGHT = 0.15;
 const FORMALITY_WEIGHT = 0.1;
 const PATTERN_WEIGHT = 0.05;
 const WARMTH_WEIGHT = 0.05;
+
+type ScoringWeights = {
+  weather: number;
+  color: number;
+  style: number;
+  formality: number;
+  pattern: number;
+  warmth: number;
+};
+
+function getPersonalizedWeights(prefs?: StylePreferences | null): ScoringWeights {
+  let formality = FORMALITY_WEIGHT;
+  let style = STYLE_WEIGHT;
+
+  if (prefs) {
+    if (prefs.dressCode === "casual") formality = 0.05;
+    else if (prefs.dressCode === "office") formality = 0.15;
+    else if (prefs.dressCode === "formal") formality = 0.20;
+
+    if (prefs.priority === "comfort") style = 0.08;
+    else if (prefs.priority === "style") style = 0.22;
+  }
+
+  // Distribute remaining weight proportionally across weather, color, pattern, warmth
+  const remaining = 1 - formality - style;
+  const baseOther = WEATHER_WEIGHT + COLOR_WEIGHT + PATTERN_WEIGHT + WARMTH_WEIGHT;
+  const scale = remaining / baseOther;
+
+  return {
+    weather: WEATHER_WEIGHT * scale,
+    color: COLOR_WEIGHT * scale,
+    style,
+    formality,
+    pattern: PATTERN_WEIGHT * scale,
+    warmth: WARMTH_WEIGHT * scale,
+  };
+}
 
 const UNKNOWN_ATTRIBUTE_PENALTY = 0.12;
 
@@ -243,10 +282,10 @@ function scoreFormalityAlignment(top: ItemWithAttributes, bottom: ItemWithAttrib
   return -0.8;
 }
 
-function expectedWarmthForWeather(temperatureC: number, precipitationMm: number): WarmthLevel {
-  if (precipitationMm >= 3 || temperatureC < 12) return "WARM";
-  if (temperatureC < 22) return "MID";
-  return "LIGHT";
+function expectedWarmthForWeather(temperatureC: number, precipitationMm: number, biasShift = 0): WarmthLevel {
+  const levels: WarmthLevel[] = ["LIGHT", "MID", "WARM"];
+  const base = precipitationMm >= 3 || temperatureC < 12 ? 2 : temperatureC < 22 ? 1 : 0;
+  return levels[Math.min(2, Math.max(0, base + biasShift))];
 }
 
 function scoreWarmthCoherence(
@@ -255,8 +294,9 @@ function scoreWarmthCoherence(
   top: ItemWithAttributes,
   bottom: ItemWithAttributes,
   shoe: ItemWithAttributes,
+  biasShift = 0,
 ) {
-  const target = warmthScale[expectedWarmthForWeather(temperatureC, precipitationMm)];
+  const target = warmthScale[expectedWarmthForWeather(temperatureC, precipitationMm, biasShift)];
   const values = [top.warmthLevel, bottom.warmthLevel, shoe.warmthLevel].map((value) => warmthScale[value]);
   const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - target), 0) / values.length;
   return clamp(1 - meanDistance * 0.75, -1, 1);
@@ -306,6 +346,7 @@ export function recommendOutfit(args: {
   bottoms: ItemWithAttributes[];
   shoes: ItemWithAttributes[];
   wornItemIds: Set<string>;
+  stylePreferences?: StylePreferences | null;
 }): RecommendationResult {
   const ranked = rankOutfits({
     ...args,
@@ -326,9 +367,15 @@ export function rankOutfits(args: {
   wornItemIds: Set<string>;
   offset: number;
   limit: number;
+  stylePreferences?: StylePreferences | null;
 }): RecommendationResult[] {
-  const { dateKey, temperatureC, precipitationMm, tops, bottoms, shoes, wornItemIds, offset, limit } = args;
+  const { dateKey, temperatureC, precipitationMm, tops, bottoms, shoes, wornItemIds, offset, limit, stylePreferences } = args;
   const isRaining = precipitationMm >= 0.1;
+  const weights = getPersonalizedWeights(stylePreferences);
+  const warmthBiasShift =
+    stylePreferences?.tempSensitivity === "cold" ? 1
+    : stylePreferences?.tempSensitivity === "warm" ? -1
+    : 0;
 
   if (offset < 0 || limit <= 0) return [];
   if (!tops.length || !bottoms.length || !shoes.length) return [];
@@ -377,6 +424,7 @@ export function rankOutfits(args: {
           top,
           bottom,
           shoe,
+          warmthBiasShift,
         );
 
         const historyPenalty =
@@ -388,12 +436,12 @@ export function rankOutfits(args: {
         const metadataCompletenessPenalty = unknownAttributeCount * UNKNOWN_ATTRIBUTE_PENALTY;
 
         const totalScore =
-          weatherScore * WEATHER_WEIGHT +
-          colorHarmonyScore * COLOR_WEIGHT +
-          styleConsistencyScore * STYLE_WEIGHT +
-          formalityAlignmentScore * FORMALITY_WEIGHT +
-          patternBalanceScore * PATTERN_WEIGHT +
-          warmthCoherenceScore * WARMTH_WEIGHT -
+          weatherScore * weights.weather +
+          colorHarmonyScore * weights.color +
+          styleConsistencyScore * weights.style +
+          formalityAlignmentScore * weights.formality +
+          patternBalanceScore * weights.pattern +
+          warmthCoherenceScore * weights.warmth -
           historyPenalty * 0.1 -
           metadataCompletenessPenalty;
 
