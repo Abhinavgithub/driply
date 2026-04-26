@@ -2,6 +2,7 @@ import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
 import {
   buildFallbackVisualSummary,
@@ -273,10 +274,16 @@ export async function GET() {
   return NextResponse.json({ items: await attachSignedPhotoUrls(items) });
 }
 
+const MAX_WARDROBE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
+
 export async function POST(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!checkRateLimit(`items:post:${currentUser.appUser.id}`, 20)) {
+    return NextResponse.json({ error: "Too many uploads. Try again in a minute." }, { status: 429 });
   }
 
   const formData = await req.formData();
@@ -339,6 +346,13 @@ export async function POST(req: NextRequest) {
     if (!(rawPhoto instanceof Blob) || rawPhoto.size === 0) {
       return NextResponse.json(
         { error: "One of the selected photos is invalid." },
+        { status: 400 },
+      );
+    }
+
+    if (rawPhoto.size > MAX_WARDROBE_PHOTO_BYTES) {
+      return NextResponse.json(
+        { error: "Photo exceeds 10 MB limit." },
         { status: 400 },
       );
     }
@@ -407,6 +421,10 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  if (!checkRateLimit(`items:delete:${currentUser.appUser.id}`, 30)) {
+    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = DeleteBodySchema.safeParse(json);
   if (!parsed.success) {
@@ -433,7 +451,7 @@ export async function DELETE(req: NextRequest) {
   });
 
   await prisma.item.delete({
-    where: { id: parsed.data.itemId },
+    where: { id: parsed.data.itemId, userId: currentUser.appUser.id },
   });
 
   await deleteWardrobePhoto(existingItem.photoUrl);
@@ -445,6 +463,10 @@ export async function PATCH(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (!checkRateLimit(`items:patch:${currentUser.appUser.id}`, 30)) {
+    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
   }
 
   const json = await req.json().catch(() => null);
@@ -475,7 +497,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updated = await prisma.item.update({
-    where: { id: itemId },
+    where: { id: itemId, userId: currentUser.appUser.id },
     data: {
       ...(kind ? { kind } : {}),
       ...(subtype ? { subtype: nextSubtype } : {}),

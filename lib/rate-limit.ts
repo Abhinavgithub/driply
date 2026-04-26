@@ -1,5 +1,13 @@
 const store = new Map<string, { count: number; windowStart: number }>();
 
+// Evict expired entries every 5 minutes to prevent unbounded memory growth.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of store) {
+    if (now - entry.windowStart > 60_000) store.delete(key);
+  }
+}, 5 * 60 * 1000);
+
 export function checkRateLimit(key: string, maxPerMinute: number): boolean {
   const now = Date.now();
   const entry = store.get(key);

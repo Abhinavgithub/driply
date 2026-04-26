@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
 import {
@@ -51,6 +52,11 @@ export async function PATCH(req: NextRequest) {
   }
 
   const userId = currentUser.appUser.id;
+
+  if (!checkRateLimit(`profile:patch:${userId}`, 10)) {
+    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();
