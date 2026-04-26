@@ -1,6 +1,6 @@
 import { InferenceClient } from "@huggingface/inference";
 
-import { getConfig } from "@/lib/appConfig";
+import { getConfig, isEnabledFlag } from "@/lib/appConfig";
 
 import { TryOnApiError } from "@/lib/gemini-tryon";
 import type { TryOnResult } from "@/lib/gemini-tryon";
@@ -18,11 +18,6 @@ export async function getTryOnProvider(): Promise<TryOnProvider> {
   if (raw === "flux") return "flux";
   if (raw === "openai") return "openai";
   return "gemini";
-}
-
-function isEnabledFlag(value: string | undefined): boolean {
-  if (!value) return false;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 export async function isFluxTryOnEnabled(): Promise<boolean> {

@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { withAuth } from "@/lib/api-guard";
 import { dateKeyToUtcStart } from "@/lib/date-utils";
 import { prisma } from "@/lib/prisma";
 
@@ -13,12 +12,7 @@ const BodySchema = z.object({
   shoeItemId: z.string().min(1),
 });
 
-export async function GET(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export const GET = withAuth(async (currentUser, req) => {
   // Accept the client's local date so the 7-day window is anchored to the
   // user's local day, not UTC (avoids off-by-one near UTC midnight).
   const localDate = new URL(req.url).searchParams.get("date");
@@ -38,18 +32,10 @@ export async function GET(req: NextRequest) {
 
   const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
   return NextResponse.json({ dateKeys });
-}
+});
 
-export async function POST(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (!checkRateLimit(`outfits:post:${currentUser.appUser.id}`, 30)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const POST = withAuth(
+  async (currentUser, req) => {
   const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
@@ -97,4 +83,6 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, history });
-}
+  },
+  { key: (u) => `outfits:post:${u.appUser.id}`, max: 30 },
+);

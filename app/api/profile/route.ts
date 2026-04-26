@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
-import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
+import { withAuth } from "@/lib/api-guard";
+import { validateImageBlob } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
 import {
   deleteProfilePhoto,
@@ -16,12 +15,7 @@ const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 const DisplayNameSchema = z.string().trim().min(1).max(80);
 
 
-export async function GET() {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export const GET = withAuth(async (currentUser) => {
   const user = await prisma.user.findUnique({
     where: { id: currentUser.appUser.id },
     select: {
@@ -43,19 +37,11 @@ export async function GET() {
     aiTryOnPhotoUrl: tryOnSignedUrl,
     hasTryOnPhoto: Boolean(user?.aiTryOnPhotoUrl),
   });
-}
+});
 
-export async function PATCH(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export const PATCH = withAuth(
+  async (currentUser, req) => {
   const userId = currentUser.appUser.id;
-
-  if (!checkRateLimit(`profile:patch:${userId}`, 10)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
 
   let formData: FormData;
   try {
@@ -89,18 +75,11 @@ export async function PATCH(req: NextRequest) {
 
   // Handle avatar upload
   if (rawAvatar instanceof Blob && rawAvatar.size > 0) {
-    if (rawAvatar.size > MAX_PROFILE_PHOTO_BYTES) {
-      return NextResponse.json({ error: "Avatar exceeds 10 MB limit." }, { status: 400 });
+    const avatarResult = await validateImageBlob(rawAvatar, MAX_PROFILE_PHOTO_BYTES, "avatar");
+    if (!avatarResult.ok) {
+      return NextResponse.json({ error: avatarResult.error }, { status: 400 });
     }
-    const bytes = await readBlobBytes(rawAvatar);
-    const avatarMime = validateImageMime(bytes, rawAvatar.type);
-    const ext = avatarMime ? mimeToExt(avatarMime) : null;
-    if (!ext || !avatarMime) {
-      return NextResponse.json(
-        { error: `Unsupported avatar type: ${rawAvatar.type || "unknown"}` },
-        { status: 400 },
-      );
-    }
+    const { bytes, mime: avatarMime, ext } = avatarResult;
 
     const path = await uploadProfilePhoto({ userId, kind: "avatar", bytes, extension: ext, contentType: avatarMime });
     updates.uploadedAvatarUrl = path;
@@ -113,18 +92,11 @@ export async function PATCH(req: NextRequest) {
 
   // Handle AI try-on photo upload
   if (rawTryOnPhoto instanceof Blob && rawTryOnPhoto.size > 0) {
-    if (rawTryOnPhoto.size > MAX_PROFILE_PHOTO_BYTES) {
-      return NextResponse.json({ error: "Try-on photo exceeds 10 MB limit." }, { status: 400 });
+    const tryOnResult = await validateImageBlob(rawTryOnPhoto, MAX_PROFILE_PHOTO_BYTES, "try-on photo");
+    if (!tryOnResult.ok) {
+      return NextResponse.json({ error: tryOnResult.error }, { status: 400 });
     }
-    const bytes = await readBlobBytes(rawTryOnPhoto);
-    const tryOnMime = validateImageMime(bytes, rawTryOnPhoto.type);
-    const ext = tryOnMime ? mimeToExt(tryOnMime) : null;
-    if (!ext || !tryOnMime) {
-      return NextResponse.json(
-        { error: `Unsupported try-on photo type: ${rawTryOnPhoto.type || "unknown"}` },
-        { status: 400 },
-      );
-    }
+    const { bytes, mime: tryOnMime, ext } = tryOnResult;
 
     const path = await uploadProfilePhoto({
       userId,
@@ -167,4 +139,6 @@ export async function PATCH(req: NextRequest) {
     aiTryOnPhotoUrl: tryOnSignedUrl,
     hasTryOnPhoto: Boolean(updated.aiTryOnPhotoUrl),
   });
-}
+  },
+  { key: (u) => `profile:patch:${u.appUser.id}`, max: 10 },
+);

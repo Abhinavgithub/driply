@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 10 * 1024 * 1024;
+import { fetchJson } from "@/lib/fetch-utils";
+import { validateImageFile } from "@/lib/file-utils";
 
 type ProfileData = {
   displayName: string | null;
@@ -23,12 +23,6 @@ function AvatarPlaceholder({ letter }: { letter?: string }) {
       )}
     </div>
   );
-}
-
-function validateImageFile(file: File): string | null {
-  if (!ACCEPTED_TYPES.includes(file.type)) return "Please upload a JPG, PNG, or WEBP image.";
-  if (file.size > MAX_BYTES) return "File exceeds the 10 MB limit.";
-  return null;
 }
 
 async function checkLandscape(file: File): Promise<boolean> {
@@ -63,10 +57,7 @@ export default function ProfilePage() {
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/profile");
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || "Failed to load profile.");
-        const data = json as ProfileData;
+        const data = await fetchJson<ProfileData>("/api/profile");
         setProfile(data);
         setDisplayName(data.displayName ?? "");
       } catch (e) {

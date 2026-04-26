@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
-import { readBlobBytes, validateImageMime, mimeToExt } from "@/lib/file-magic";
+import { withAuth } from "@/lib/api-guard";
+import { validateImageBlob } from "@/lib/file-magic";
 import {
   buildFallbackVisualSummary,
   classifyWardrobeImage,
@@ -260,34 +259,22 @@ async function resolveUploadMetadata(args: {
   }
 }
 
-export async function GET() {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export const GET = withAuth(async (user) => {
   const items = await prisma.item.findMany({
-    where: { userId: currentUser.appUser.id },
+    where: { userId: user.appUser.id },
     orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json({ items: await attachSignedPhotoUrls(items) });
-}
+});
 
 const MAX_WARDROBE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
-export async function POST(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (!checkRateLimit(`items:post:${currentUser.appUser.id}`, 20)) {
-    return NextResponse.json({ error: "Too many uploads. Try again in a minute." }, { status: 429 });
-  }
-
+export const POST = withAuth(
+  async (user, req) => {
   const formData = await req.formData();
 
+  const userId = user.appUser.id;
   const manualKind = normalizeKindInput(formData.get("kind"));
   const manualSubtype = normalizeSubtypeInput(formData.get("subtype"));
   const rawPhotos = formData.getAll("photo");
@@ -350,29 +337,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (rawPhoto.size > MAX_WARDROBE_PHOTO_BYTES) {
-      return NextResponse.json(
-        { error: "Photo exceeds 10 MB limit." },
-        { status: 400 },
-      );
+    const photoResult = await validateImageBlob(rawPhoto, MAX_WARDROBE_PHOTO_BYTES, "photo");
+    if (!photoResult.ok) {
+      return NextResponse.json({ error: photoResult.error }, { status: 400 });
     }
 
     const itemId = crypto.randomUUID();
-    const bytes = await readBlobBytes(rawPhoto);
-
-    const verifiedMime = validateImageMime(bytes, rawPhoto.type);
-    const ext = verifiedMime ? mimeToExt(verifiedMime) : null;
-    if (!ext || !verifiedMime) {
-      return NextResponse.json(
-        { error: `Unsupported image type: ${rawPhoto.type || "unknown"}` },
-        { status: 400 },
-      );
-    }
+    const { bytes, mime: verifiedMime, ext } = photoResult;
 
     let photoPath = "";
     try {
       photoPath = await uploadWardrobePhoto({
-        userId: currentUser.appUser.id,
+        userId,
         itemId,
         bytes,
         extension: ext,
@@ -389,7 +365,7 @@ export async function POST(req: NextRequest) {
       const item = await prisma.item.create({
         data: {
           id: itemId,
-          userId: currentUser.appUser.id,
+          userId,
           kind: resolved.kind,
           subtype: resolved.subtype,
           ...resolved.attributes,
@@ -413,18 +389,12 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ items: await attachSignedPhotoUrls(createdItems) });
-}
+  },
+  { key: (u) => `items:post:${u.appUser.id}`, max: 20 },
+);
 
-export async function DELETE(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (!checkRateLimit(`items:delete:${currentUser.appUser.id}`, 30)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const DELETE = withAuth(
+  async (user, req) => {
   const json = await req.json().catch(() => null);
   const parsed = DeleteBodySchema.safeParse(json);
   if (!parsed.success) {
@@ -432,7 +402,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   const existingItem = await prisma.item.findFirst({
-    where: { id: parsed.data.itemId, userId: currentUser.appUser.id },
+    where: { id: parsed.data.itemId, userId: user.appUser.id },
   });
 
   if (!existingItem) {
@@ -441,7 +411,7 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.outfitHistory.deleteMany({
     where: {
-      userId: currentUser.appUser.id,
+      userId: user.appUser.id,
       OR: [
         { topItemId: parsed.data.itemId },
         { bottomItemId: parsed.data.itemId },
@@ -451,24 +421,18 @@ export async function DELETE(req: NextRequest) {
   });
 
   await prisma.item.delete({
-    where: { id: parsed.data.itemId, userId: currentUser.appUser.id },
+    where: { id: parsed.data.itemId, userId: user.appUser.id },
   });
 
   await deleteWardrobePhoto(existingItem.photoUrl);
 
   return NextResponse.json({ ok: true });
-}
+  },
+  { key: (u) => `items:delete:${u.appUser.id}`, max: 30 },
+);
 
-export async function PATCH(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (!checkRateLimit(`items:patch:${currentUser.appUser.id}`, 30)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const PATCH = withAuth(
+  async (user, req) => {
   const json = await req.json().catch(() => null);
   const parsed = UpdateBodySchema.safeParse(json);
   if (!parsed.success) {
@@ -480,7 +444,7 @@ export async function PATCH(req: NextRequest) {
 
   const { itemId, kind, subtype, ...attributes } = parsed.data;
   const existingItem = await prisma.item.findFirst({
-    where: { id: itemId, userId: currentUser.appUser.id },
+    where: { id: itemId, userId: user.appUser.id },
   });
 
   if (!existingItem) {
@@ -497,7 +461,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updated = await prisma.item.update({
-    where: { id: itemId, userId: currentUser.appUser.id },
+    where: { id: itemId, userId: user.appUser.id },
     data: {
       ...(kind ? { kind } : {}),
       ...(subtype ? { subtype: nextSubtype } : {}),
@@ -533,4 +497,6 @@ export async function PATCH(req: NextRequest) {
 
   const [signedItem] = await attachSignedPhotoUrls([updated]);
   return NextResponse.json({ ok: true, item: signedItem });
-}
+  },
+  { key: (u) => `items:patch:${u.appUser.id}`, max: 30 },
+);

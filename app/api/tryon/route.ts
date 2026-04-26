@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { withAuth } from "@/lib/api-guard";
 import { generateTryOnImage, isAiTryOnEnabled, normalizeTryOnErrorCode } from "@/lib/gemini-tryon";
 import { generateFluxTryOnImage, getTryOnProvider, isFluxTryOnEnabled } from "@/lib/flux-tryon";
 import { generateOpenAITryOnImage, isOpenAITryOnEnabled } from "@/lib/openai-tryon";
@@ -16,16 +15,8 @@ const RequestSchema = z.object({
   shoeItemId: z.string().min(1),
 });
 
-export async function POST(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (!checkRateLimit(currentUser.appUser.id, 10)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const POST = withAuth(
+  async (currentUser, req) => {
   const provider = await getTryOnProvider();
 
   const enabled =
@@ -151,4 +142,6 @@ export async function POST(req: NextRequest) {
     console.warn("[api/tryon] generation failed", { provider, code, error: error instanceof Error ? error.message : String(error) });
     return NextResponse.json({ ok: false, reason: "generation_failed", code });
   }
-}
+  },
+  { key: (u) => `tryon:post:${u.appUser.id}`, max: 10 },
+);

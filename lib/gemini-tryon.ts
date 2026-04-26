@@ -1,6 +1,6 @@
 import sharp from "sharp";
 
-import { getConfig } from "@/lib/appConfig";
+import { getConfig, isEnabledFlag } from "@/lib/appConfig";
 
 const DEFAULT_TRYON_MODEL = "gemini-2.5-flash-image";
 const TRYON_TIMEOUT_MS = 45000;
@@ -39,11 +39,6 @@ export class TryOnApiError extends Error {
     this.code = code;
     this.status = status;
   }
-}
-
-function isEnabledFlag(value: string | undefined): boolean {
-  if (!value) return false;
-  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 export async function isAiTryOnEnabled(): Promise<boolean> {

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { fetchJson } from "@/lib/fetch-utils";
+
 import {
   colorFamilies,
   defaultItemAttributes,
@@ -100,12 +102,9 @@ export default function LibraryPage() {
   });
 
   useEffect(() => {
-    void (async () => {
-      const res = await fetch("/api/items");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to load items");
-      setItems(json.items ?? []);
-    })().catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void fetchJson<{ items: Item[] }>("/api/items")
+      .then((data) => setItems(data.items ?? []))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   const grouped = useMemo(() => {
@@ -161,10 +160,8 @@ export default function LibraryPage() {
   }
 
   async function refreshItems() {
-    const listRes = await fetch("/api/items");
-    const listJson = await listRes.json();
-    if (!listRes.ok) throw new Error(listJson?.error || "Failed to reload items");
-    setItems(listJson.items ?? []);
+    const data = await fetchJson<{ items: Item[] }>("/api/items");
+    setItems(data.items ?? []);
   }
 
   async function onSubmit(e: FormEvent) {
