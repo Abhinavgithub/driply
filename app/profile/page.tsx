@@ -263,8 +263,8 @@ export default function ProfilePage() {
         <div className="space-y-3">
           {QUIZ_QUESTIONS.map((q) => (
             <div key={q.field} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-              <span className="text-xs font-medium muted-copy sm:w-24 sm:shrink-0 sm:font-normal">{q.shortLabel}</span>
-              <div className="flex flex-wrap gap-1.5">
+              <span className="text-sm font-semibold text-foreground sm:w-28 sm:shrink-0">{q.shortLabel}</span>
+              <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
                 {q.options.map((option) => {
                   const isSelected = localPrefs[q.field] === option.value;
                   return (
