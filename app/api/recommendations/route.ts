@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { applyAiRecommendationRerank } from "@/lib/aiRecommendation";
-import { getCurrentUser } from "@/lib/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { withAuth } from "@/lib/api-guard";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
@@ -22,15 +21,8 @@ const QuerySchema = z.object({
 });
 
 
-export async function GET(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-  if (!checkRateLimit(currentUser.appUser.id, 20)) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const GET = withAuth(
+  async (currentUser, req) => {
   const { searchParams } = new URL(req.url);
   const parsed = QuerySchema.safeParse({
     lat: searchParams.get("lat"),
@@ -65,7 +57,7 @@ export async function GET(req: NextRequest) {
       where: { userId: currentUser.appUser.id, date: { gte: cutoff, lt: todayStart } },
       take: 50,
       orderBy: { createdAt: "desc" },
-    }),
+    }).catch(() => []),
   ]);
 
   if (!tops.length || !bottoms.length || !shoes.length) {
@@ -171,4 +163,6 @@ export async function GET(req: NextRequest) {
     decisionConfidence: decision.decisionConfidence,
     aiReason: decision.aiReason,
   });
-}
+  },
+  { key: (u) => `recommendations:get:${u.appUser.id}`, max: 20 },
+);

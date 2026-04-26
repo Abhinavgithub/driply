@@ -4,20 +4,12 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_BYTES = 10 * 1024 * 1024;
-
+import { validateImageFile } from "@/lib/file-utils";
 
 type ItemKind = "TOP" | "BOTTOM" | "SHOE";
 type WizardStep = 1 | 2;
 type ItemCounts = { TOP: number; BOTTOM: number; SHOE: number };
 type Previews = { TOP: string | null; BOTTOM: string | null; SHOE: string | null };
-
-function validateImageFile(file: File): string | null {
-  if (!ACCEPTED_TYPES.includes(file.type)) return "Please upload a JPG, PNG, or WEBP image.";
-  if (file.size > MAX_BYTES) return "File is too large (max 10 MB).";
-  return null;
-}
 
 function ArrowRightIcon() {
   return (

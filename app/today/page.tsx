@@ -278,7 +278,9 @@ async function fetchRecommendationPage(args: {
   const res = await fetch(
     `/api/recommendations?lat=${coords.lat}&lon=${coords.lon}&date=${encodeURIComponent(dateKey)}&offset=${offset}&limit=${limit}`,
   );
-  const json = await res.json();
+  // Use .catch so HTML error pages (e.g. Next.js 500) don't throw before the
+  // caller can inspect res.ok and surface the right error message.
+  const json = await res.json().catch(() => ({}));
   return { res, json };
 }
 
@@ -286,9 +288,9 @@ async function searchManualLocations(query: string) {
   const res = await fetch(
     `/api/location-search?q=${encodeURIComponent(query)}`,
   );
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || 'Location search failed.');
-  return (json.results ?? []) as LocationResult[];
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((json as { error?: string }).error || 'Location search failed.');
+  return ((json as { results?: LocationResult[] }).results ?? []) as LocationResult[];
 }
 
 export default function TodayPage() {

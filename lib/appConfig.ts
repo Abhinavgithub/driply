@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
+/** Returns true for "1", "true", "yes", "on" (case-insensitive). */
+export function isEnabledFlag(value: string | undefined): boolean {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
 let cache: Record<string, string> | null = null;
 let cacheExpiresAt = 0;
 const CACHE_TTL_MS = 60_000; // 60 seconds

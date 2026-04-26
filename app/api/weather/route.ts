@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth";
+import { withAuth } from "@/lib/api-guard";
 import { fetchWeather } from "@/lib/openMeteo";
 
 const QuerySchema = z.object({
@@ -9,12 +9,7 @@ const QuerySchema = z.object({
   lon: z.coerce.number().min(-180).max(180),
 });
 
-export async function GET(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
+export const GET = withAuth(async (_user, req) => {
   const { searchParams } = new URL(req.url);
   const parsed = QuerySchema.safeParse({
     lat: searchParams.get("lat"),
@@ -35,4 +30,4 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Failed to fetch weather" }, { status: 502 });
   }
-}
+});

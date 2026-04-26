@@ -34,6 +34,36 @@ function detectImageMime(buf: Buffer): string | null {
   return null;
 }
 
+export type ImageBlobResult =
+  | { ok: true; bytes: Buffer; mime: string; ext: string }
+  | { ok: false; error: string };
+
+/**
+ * Reads, size-checks, and MIME-validates an image Blob in one step.
+ * Returns a discriminated union so callers can early-return on error without
+ * repeating the same three-step validation block.
+ */
+export async function validateImageBlob(
+  blob: Blob,
+  maxBytes: number,
+  label: string,
+): Promise<ImageBlobResult> {
+  if (blob.size > maxBytes)
+    return {
+      ok: false,
+      error: `${label} exceeds ${Math.round(maxBytes / 1024 / 1024)} MB limit.`,
+    };
+  const bytes = await readBlobBytes(blob);
+  const mime = validateImageMime(bytes, blob.type);
+  const ext = mime ? mimeToExt(mime) : null;
+  if (!ext || !mime)
+    return {
+      ok: false,
+      error: `Unsupported ${label} type: ${blob.type || "unknown"}`,
+    };
+  return { ok: true, bytes, mime, ext };
+}
+
 /**
  * Validates an uploaded image blob. Returns the verified MIME type or null if
  * the file is not an allowed image type.
