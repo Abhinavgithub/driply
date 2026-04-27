@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api-guard";
+import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { dateKeyToUtcStart } from "@/lib/date-utils";
 import { prisma } from "@/lib/prisma";
 
@@ -10,6 +11,10 @@ const BodySchema = z.object({
   topItemId: z.string().min(1),
   bottomItemId: z.string().min(1),
   shoeItemId: z.string().min(1),
+});
+
+const DeleteSchema = z.object({
+  id: z.string().min(1),
 });
 
 export const GET = withAuth(async (currentUser, req) => {
@@ -26,12 +31,32 @@ export const GET = withAuth(async (currentUser, req) => {
       userId: currentUser.appUser.id,
       date: { gte: sevenDaysAgo },
     },
-    select: { date: true },
+    select: { id: true, date: true, topItemId: true, bottomItemId: true, shoeItemId: true },
     orderBy: { date: "asc" },
   });
 
   const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
-  return NextResponse.json({ dateKeys });
+
+  // Fetch item photo paths for the history detail bottom sheet
+  const allItemIds = [...new Set(records.flatMap((r) => [r.topItemId, r.bottomItemId, r.shoeItemId]))];
+  const items = allItemIds.length
+    ? await prisma.item.findMany({
+        where: { id: { in: allItemIds }, userId: currentUser.appUser.id },
+        select: { id: true, photoUrl: true, kind: true },
+      })
+    : [];
+  const signedItems = await attachSignedPhotoUrls(items);
+  const photoById = new Map(signedItems.map((i) => [i.id, i.photoUrl]));
+
+  const history = records.map((r) => ({
+    id: r.id,
+    dateKey: r.date.toISOString().slice(0, 10),
+    topPhotoUrl: photoById.get(r.topItemId) ?? null,
+    bottomPhotoUrl: photoById.get(r.bottomItemId) ?? null,
+    shoePhotoUrl: photoById.get(r.shoeItemId) ?? null,
+  }));
+
+  return NextResponse.json({ dateKeys, history });
 });
 
 export const POST = withAuth(
@@ -85,4 +110,27 @@ export const POST = withAuth(
   return NextResponse.json({ ok: true, history });
   },
   { key: (u) => `outfits:post:${u.appUser.id}`, max: 30 },
+);
+
+export const DELETE = withAuth(
+  async (currentUser, req) => {
+    const json = await req.json().catch(() => null);
+    const parsed = DeleteSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid payload. Expected id." }, { status: 400 });
+    }
+
+    const record = await prisma.outfitHistory.findFirst({
+      where: { id: parsed.data.id, userId: currentUser.appUser.id },
+      select: { id: true },
+    });
+
+    if (!record) {
+      return NextResponse.json({ error: "Not found." }, { status: 404 });
+    }
+
+    await prisma.outfitHistory.delete({ where: { id: record.id } });
+    return NextResponse.json({ ok: true });
+  },
+  { key: (u) => `outfits:delete:${u.appUser.id}`, max: 20 },
 );

@@ -81,6 +81,14 @@ type UserProfile = {
   hasTryOnPhoto: boolean;
 };
 
+type WornHistoryItem = {
+  id: string;
+  dateKey: string;
+  topPhotoUrl: string | null;
+  bottomPhotoUrl: string | null;
+  shoePhotoUrl: string | null;
+};
+
 const GEOLOCATION_RETRY_DELAYS_MS = [1200, 2200];
 
 const COLOR_SWATCHES: Record<string, string> = {
@@ -324,6 +332,9 @@ export default function TodayPage() {
 
   // v2 state
   const [wornDateKeys, setWornDateKeys] = useState<Set<string>>(new Set());
+  const [wornHistory, setWornHistory] = useState<WornHistoryItem[]>([]);
+  const [undoRecord, setUndoRecord] = useState<{ id: string; timerId: ReturnType<typeof setTimeout> } | null>(null);
+  const [selectedHistoryDay, setSelectedHistoryDay] = useState<string | null>(null);
   const [scoreDisplay, setScoreDisplay] = useState(0);
   const [scoreAnimated, setScoreAnimated] = useState(false);
   const [chatText, setChatText] = useState('');
@@ -462,6 +473,7 @@ export default function TodayPage() {
       .then((json) => {
         if (!active) return;
         setWornDateKeys(new Set((json.dateKeys ?? []) as string[]));
+        setWornHistory((json.history ?? []) as WornHistoryItem[]);
       })
       .catch(() => {});
     return () => {
@@ -640,10 +652,37 @@ export default function TodayPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || 'Save failed.');
+      const historyId: string = json.history?.id;
       setMarked(true);
       setWornDateKeys((prev) => new Set([...prev, localDateKey]));
+
+      // Set up undo record with auto-dismiss after 5s
+      if (undoRecord) clearTimeout(undoRecord.timerId);
+      const timerId = setTimeout(() => setUndoRecord(null), 5000);
+      setUndoRecord({ id: historyId, timerId });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function onUndo() {
+    if (!undoRecord) return;
+    clearTimeout(undoRecord.timerId);
+    setUndoRecord(null);
+    try {
+      await fetch('/api/outfits', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: undoRecord.id }),
+      });
+      setMarked(false);
+      setWornDateKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(localDateKey);
+        return next;
+      });
+    } catch {
+      // silently fail — user can re-check history
     }
   }
 
@@ -1349,12 +1388,113 @@ export default function TodayPage() {
             {weekDays.map((day) => (
               <div key={day.key} className='week-day'>
                 <div className='week-day-label'>{day.label}</div>
-                <div className={`week-dot-wrap ${day.state}`}>
+                <button
+                  type='button'
+                  disabled={day.state !== 'worn'}
+                  onClick={() => day.state === 'worn' && setSelectedHistoryDay(
+                    selectedHistoryDay === day.key ? null : day.key
+                  )}
+                  className={`week-dot-wrap ${day.state}${selectedHistoryDay === day.key ? ' selected' : ''}`}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: day.state === 'worn' ? 'pointer' : 'default' }}
+                  aria-label={day.state === 'worn' ? `View outfit worn on ${day.label}` : undefined}
+                >
                   <div className='week-dot' />
-                </div>
+                </button>
               </div>
             ))}
           </div>
+
+          {/* Inline outfit detail for selected day */}
+          {selectedHistoryDay && (() => {
+            const entry = wornHistory.find((h) => h.dateKey === selectedHistoryDay);
+            if (!entry) return null;
+            const photos = [
+              { url: entry.topPhotoUrl, label: 'Top' },
+              { url: entry.bottomPhotoUrl, label: 'Bottom' },
+              { url: entry.shoePhotoUrl, label: 'Shoes' },
+            ];
+            return (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 16,
+                }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  {photos.map(({ url, label }) => (
+                    <div key={label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <div
+                        style={{
+                          width: '100%',
+                          aspectRatio: '1',
+                          borderRadius: 12,
+                          overflow: 'hidden',
+                          background: 'var(--background)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted-foreground)', fontSize: 20 }}>?</div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--muted-foreground)', fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)" }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : null}
+
+      {/* Undo toast — fixed above bottom nav */}
+      {undoRecord ? (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 'calc(64px + 16px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 50,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 9999,
+            padding: '10px 16px 10px 20px',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap',
+            minWidth: 240,
+            maxWidth: 'calc(100vw - 32px)',
+          }}
+        >
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)" }}>
+            Outfit logged ✓
+          </span>
+          <button
+            type='button'
+            onClick={() => void onUndo()}
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: 'oklch(75% 0.18 200)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px 8px',
+              borderRadius: 9999,
+              fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
+            }}
+          >
+            Undo
+          </button>
         </div>
       ) : null}
     </div>
