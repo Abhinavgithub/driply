@@ -46,7 +46,7 @@ export const GET = withAuth(
 
   const todayStart = dateKeyToUtcStart(dateKey);
   const cutoff = new Date(todayStart);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 3);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 7);
 
   const [[tops, bottoms, shoes], weatherResult, recent] = await Promise.all([
     Promise.all([
