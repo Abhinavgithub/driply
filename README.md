@@ -6,12 +6,17 @@ A wardrobe assistant that recommends daily outfits based on the weather and your
 
 - Upload clothing photos — AI classifies kind, subtype, color, pattern, style, formality, and warmth automatically
 - Weather-aware outfit recommendations with a transparent scoring breakdown
+- Personalised scoring — a 5-question style quiz at onboarding adjusts recommendation weights to match your dress code, lifestyle, priorities, color palette, and temperature sensitivity
 - AI outfit re-ranking — Gemini selects the best candidate and explains why
-- AI try-on preview — see yourself wearing the recommended outfit (Gemini multimodal or FLUX text-to-image)
-- Outfit history tracking — recently worn combinations are deprioritised
+- AI try-on preview — see yourself wearing the recommended outfit (Gemini multimodal, OpenAI gpt-image-2, or FLUX text-to-image)
+- Outfit log — one-tap "Mark as worn" with 5-second undo; worn combinations are deprioritised for 7 days
+- Tappable week history — tap any worn day to see the 3 outfit photos from that day
+- Guided onboarding — style quiz → wardrobe prompt → try-on photo upload
+- Time-aware home page — greeting and mood theme adapt to weather and time of day
+- Mobile-first UI — bottom tab navigation, responsive layouts, hamburger menu on landing page
 - Manual attribute overrides and per-item re-analysis for items stuck in pending
 - Collapsible wardrobe library organised by category (Tops / Bottoms / Shoes)
-- Google OAuth and email/password sign-in
+- Google OAuth, email/password sign-in, forgot password / reset password flow
 
 ## Tech Stack
 
@@ -21,7 +26,7 @@ A wardrobe assistant that recommends daily outfits based on the weather and your
 | Database | PostgreSQL via Supabase + Prisma 7 (`@prisma/adapter-pg`) |
 | Auth | Supabase Auth — Google OAuth + email/password (PKCE, SSR cookies) |
 | Storage | Supabase Storage |
-| AI | Google Gemini API; optional HuggingFace FLUX fallback for try-on |
+| AI | Google Gemini API; optional OpenAI gpt-image-2 or HuggingFace FLUX for try-on |
 | Styling | Tailwind CSS 4 + CSS variables |
 | Validation | Zod 4 |
 
@@ -40,9 +45,9 @@ Analyses uploaded clothing photos via Gemini to infer kind (TOP / BOTTOM / SHOE)
 
 ### Outfit Re-Ranking (`ENABLE_AI_RECOMMENDER`)
 
-The deterministic engine scores every top × bottom × shoe combination:
+The deterministic engine scores every top × bottom × shoe combination. Base weights:
 
-| Signal | Weight |
+| Signal | Default weight |
 |---|---|
 | Weather match | 45% |
 | Color harmony | 20% |
@@ -50,6 +55,13 @@ The deterministic engine scores every top × bottom × shoe combination:
 | Formality match | 10% |
 | Pattern balance | 5% |
 | Warmth appropriateness | 5% |
+
+Weights are **personalised** at request time using the user's style quiz answers:
+
+- Dress code preference shifts the formality weight (5% → 20%)
+- Priority preference shifts the style weight (8% → 22%)
+- Remaining weights are scaled proportionally so the total always equals 1.0
+- Temperature sensitivity shifts the expected warmth band (cold/warm bias)
 
 The top candidates are then optionally passed to Gemini, which selects the best outfit and returns a plain-English explanation.
 
@@ -70,34 +82,40 @@ Rate-limited to 10 requests per minute per user. Silently skipped if no try-on p
 
 ```
 app/
-  (auth)/            sign-in, sign-up, auth callback
-  today/             outfit recommendation page
-  library/           wardrobe item management
-  profile/           display name, avatar, try-on photo upload
-  api/               all API routes
+  (auth)/              sign-in, sign-up, auth callback
+  today/               outfit recommendation home page
+  library/             wardrobe item management
+  profile/             display name, avatar, style quiz, try-on photo
+  onboarding/          guided setup wizard (style quiz → wardrobe → try-on)
+  api/                 all API routes
 lib/
-  gemini.ts          image classification + outfit re-ranking
-  gemini-tryon.ts    try-on image generation (Gemini)
-  flux-tryon.ts      try-on image generation (FLUX)
-  recommendation.ts  deterministic outfit scoring
+  gemini.ts            image classification + outfit re-ranking
+  gemini-tryon.ts      try-on image generation (Gemini)
+  openai-tryon.ts      try-on image generation (OpenAI gpt-image-2)
+  flux-tryon.ts        try-on image generation (FLUX)
+  tryon-prompt.ts      prompt builders for all try-on providers
+  recommendation.ts    deterministic outfit scoring + personalised weights
   aiRecommendation.ts  Gemini re-ranking wrapper
-  auth.ts            getCurrentUser() + Prisma user sync
-  item-media.ts      Supabase Storage helpers (wardrobe photos)
-  profile-media.ts   Supabase Storage helpers (profile photos)
-  rate-limit.ts      in-memory rate limiter
-  file-magic.ts      image MIME validation via magic bytes
-  date-utils.ts      server date key + UTC conversion helpers
+  style-preferences.ts quiz config, StylePreferences type, validation, weight logic
+  auth.ts              getCurrentUser() + Prisma user sync
+  item-media.ts        Supabase Storage helpers (wardrobe photos)
+  profile-media.ts     Supabase Storage helpers (profile + try-on photos)
+  rate-limit.ts        in-memory rate limiter
+  file-magic.ts        image MIME validation via magic bytes
+  date-utils.ts        server date key + UTC conversion helpers
 prisma/
-  schema.prisma      User, Item, OutfitHistory models
+  schema.prisma        User, Item, OutfitHistory, AppConfig models
 ```
 
 ## Database Models
 
-**User** — synced from Supabase Auth on first login. Stores `displayName`, `uploadedAvatarUrl`, and `aiTryOnPhotoUrl` separately from the OAuth-synced fields so manual edits are never overwritten.
+**User** — synced from Supabase Auth on first login. Stores `displayName`, `uploadedAvatarUrl`, and `aiTryOnPhotoUrl` separately from the OAuth-synced fields so manual edits are never overwritten. Also stores `stylePreferences` (JSON) — the user's quiz answers used to personalise recommendation weights.
 
 **Item** — one clothing item. Key fields: `kind` (TOP/BOTTOM/SHOE), `subtype`, five attribute enums (`colorFamily`, `pattern`, `styleProfile`, `formality`, `warmthLevel`), `analysisStatus` (PENDING/READY/FAILED/SKIPPED), `photoUrl` (Supabase Storage path).
 
-**OutfitHistory** — one worn outfit per day. Stores `topItemId`, `bottomItemId`, `shoeItemId`, and `date` (UTC midnight). Used to penalise recently repeated combinations.
+**OutfitHistory** — one worn outfit per day. Stores `topItemId`, `bottomItemId`, `shoeItemId`, and `date` (UTC midnight). Used to penalise recently repeated combinations (7-day lookback). Supports undo via the `DELETE /api/outfits` endpoint.
+
+**AppConfig** — key/value store for runtime feature flags (`ENABLE_AI_CLASSIFICATION`, `ENABLE_AI_RECOMMENDER`, `ENABLE_AI_TRYON`, `TRYON_PROVIDER`). Values in the DB override environment variables, allowing flag changes without redeployment.
 
 ## Prerequisites
 
