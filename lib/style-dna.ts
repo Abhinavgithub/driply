@@ -146,7 +146,7 @@ async function generateMoodboardWithOpenAI(imagePrompt: string): Promise<Buffer>
 
   const client = new OpenAI({ apiKey, timeout: OPENAI_IMAGE_TIMEOUT_MS, maxRetries: 0 });
   const response = await client.images.generate({
-    model: "dall-e-3",
+    model: "gpt-image-2",
     prompt: imagePrompt,
     n: 1,
     size: "1024x1024",
@@ -167,11 +167,14 @@ async function generateMoodboardWithFlux(imagePrompt: string): Promise<Buffer> {
 
   const { InferenceClient } = await import("@huggingface/inference");
   const client = new InferenceClient(token);
-  const blob = await client.textToImage({
-    model: "black-forest-labs/FLUX.1-schnell",
-    inputs: imagePrompt,
-    parameters: { num_inference_steps: 5 },
-  });
+  const blob = await client.textToImage(
+    {
+      model: "black-forest-labs/FLUX.1-schnell",
+      inputs: imagePrompt,
+      parameters: { num_inference_steps: 5 },
+    },
+    { outputType: "blob" },
+  );
   const arrayBuffer = await blob.arrayBuffer();
   const rawBuffer = Buffer.from(arrayBuffer);
   return sharp(rawBuffer).webp({ quality: 85 }).toBuffer();
