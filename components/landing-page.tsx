@@ -142,6 +142,7 @@ export function LandingPage() {
     let spotX = 0, spotY = 0, targetX = 0, targetY = 0;
     let rafId: number;
     let running = false;
+    let started = false;
 
     const tick = () => {
       const dx = targetX - spotX;
@@ -160,7 +161,10 @@ export function LandingPage() {
       targetX = e.clientX; targetY = e.clientY;
       if (!running) {
         running = true;
-        spotX = targetX; spotY = targetY;
+        if (!started) {
+          started = true;
+          spotX = targetX; spotY = targetY;
+        }
         el.style.opacity = "1";
         rafId = requestAnimationFrame(tick);
       }
