@@ -135,19 +135,13 @@ export function LandingPage() {
     return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", onKey); };
   }, [isMobileMenuOpen]);
 
-  // Cursor spotlight (lerp RAF loop)
+  // Cursor spotlight — RAF loop starts only on first pointer move, skipped on touch devices
   useEffect(() => {
     const el = spotlightRef.current;
-    if (!el) return;
-    let spotX = window.innerWidth / 2, spotY = window.innerHeight / 2;
-    let targetX = spotX, targetY = spotY;
+    if (!el || window.matchMedia("(hover: none)").matches) return;
+    let spotX = 0, spotY = 0, targetX = 0, targetY = 0;
     let rafId: number;
-    let active = false;
-
-    const onMove = (e: PointerEvent) => {
-      targetX = e.clientX; targetY = e.clientY;
-      if (!active) { active = true; el.style.opacity = "1"; }
-    };
+    let running = false;
 
     const tick = () => {
       spotX += (targetX - spotX) * 0.12;
@@ -156,8 +150,17 @@ export function LandingPage() {
       rafId = requestAnimationFrame(tick);
     };
 
+    const onMove = (e: PointerEvent) => {
+      targetX = e.clientX; targetY = e.clientY;
+      if (!running) {
+        running = true;
+        spotX = targetX; spotY = targetY;
+        el.style.opacity = "1";
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
     window.addEventListener("pointermove", onMove, { passive: true });
-    rafId = requestAnimationFrame(tick);
     return () => { window.removeEventListener("pointermove", onMove); cancelAnimationFrame(rafId); };
   }, []);
 
