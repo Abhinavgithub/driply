@@ -144,10 +144,16 @@ export function LandingPage() {
     let running = false;
 
     const tick = () => {
-      spotX += (targetX - spotX) * 0.12;
-      spotY += (targetY - spotY) * 0.12;
+      const dx = targetX - spotX;
+      const dy = targetY - spotY;
+      spotX += dx * 0.12;
+      spotY += dy * 0.12;
       el.style.transform = `translate(${spotX}px, ${spotY}px) translate(-50%, -50%)`;
-      rafId = requestAnimationFrame(tick);
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        running = false;
+      }
     };
 
     const onMove = (e: PointerEvent) => {
@@ -303,16 +309,16 @@ export function LandingPage() {
             Your AI wardrobe assistant
           </div>
           <h1 className="lp-hero-headline">
-            <span className="lp-word-reveal" style={{ transitionDelay: "0.05s" }}>
-              <span>Wear&nbsp;more</span>
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.05s" }}>Wear&nbsp;more</span>
             </span>
             <br />
-            <span className="lp-word-reveal" style={{ transitionDelay: "0.15s" }}>
-              <span>of&nbsp;what&nbsp;you</span>
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.15s" }}>of&nbsp;what&nbsp;you</span>
             </span>
             <br />
-            <span className="lp-word-reveal" style={{ transitionDelay: "0.25s" }}>
-              <span><em>already&nbsp;own.</em></span>
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.25s" }}><em>already&nbsp;own.</em></span>
             </span>
           </h1>
           <p className="lp-hero-sub lp-reveal lp-reveal-delay-2">
