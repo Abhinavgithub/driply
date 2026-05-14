@@ -85,64 +85,172 @@ export function LandingPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const spotlightRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const badge1Ref = useRef<HTMLDivElement>(null);
+  const badge2Ref = useRef<HTMLDivElement>(null);
 
+  // Nav scroll
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    const handler = () => {
-      nav.classList.toggle("lp-nav-scrolled", window.scrollY > 40);
-    };
+    const handler = () => nav.classList.toggle("lp-nav-scrolled", window.scrollY > 40);
     window.addEventListener("scroll", handler, { passive: true });
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
+  // Scroll reveals + word reveals
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) e.target.classList.add("visible");
-        });
-      },
+      (entries) => { entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }); },
       { threshold: 0.15 }
     );
 
-    const reveals = container.querySelectorAll<HTMLElement>(".lp-reveal");
-    reveals.forEach((el) => observer.observe(el));
+    container.querySelectorAll<HTMLElement>(".lp-reveal, .lp-word-reveal").forEach((el) => observer.observe(el));
 
     setTimeout(() => {
       container
-        .querySelectorAll<HTMLElement>(".lp-hero .lp-reveal")
+        .querySelectorAll<HTMLElement>(".lp-hero .lp-reveal, .lp-hero .lp-word-reveal")
         .forEach((el) => el.classList.add("visible"));
     }, 100);
 
     return () => observer.disconnect();
   }, []);
 
+  // Outfit auto-cycle
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentOutfit((prev) => (prev + 1) % outfits.length);
-    }, 3500);
+    const timer = setInterval(() => setCurrentOutfit((prev) => (prev + 1) % outfits.length), 3500);
     return () => clearInterval(timer);
   }, []);
 
+  // Mobile menu keyboard / body-scroll lock
   useEffect(() => {
     if (!isMobileMenuOpen) return;
     document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setIsMobileMenuOpen(false); };
     window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => { document.body.style.overflow = ""; window.removeEventListener("keydown", onKey); };
   }, [isMobileMenuOpen]);
+
+  // Cursor spotlight — RAF loop starts only on first pointer move, skipped on touch devices
+  useEffect(() => {
+    const el = spotlightRef.current;
+    if (!el || window.matchMedia("(hover: none)").matches) return;
+    let spotX = 0, spotY = 0, targetX = 0, targetY = 0;
+    let rafId: number;
+    let running = false;
+    let started = false;
+
+    const tick = () => {
+      const dx = targetX - spotX;
+      const dy = targetY - spotY;
+      spotX += dx * 0.12;
+      spotY += dy * 0.12;
+      el.style.transform = `translate(${spotX}px, ${spotY}px) translate(-50%, -50%)`;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        rafId = requestAnimationFrame(tick);
+      } else {
+        running = false;
+      }
+    };
+
+    const onMove = (e: PointerEvent) => {
+      targetX = e.clientX; targetY = e.clientY;
+      if (!running) {
+        running = true;
+        if (!started) {
+          started = true;
+          spotX = targetX; spotY = targetY;
+        }
+        el.style.opacity = "1";
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => { window.removeEventListener("pointermove", onMove); cancelAnimationFrame(rafId); };
+  }, []);
+
+  // Magnetic buttons
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    type H = { el: HTMLElement; onMove: (e: PointerEvent) => void; onLeave: () => void };
+    const handlers: H[] = Array.from(
+      container.querySelectorAll<HTMLElement>(".lp-btn-primary, .lp-nav-cta")
+    ).map((btn) => {
+      const onMove = (e: PointerEvent) => {
+        const r = btn.getBoundingClientRect();
+        btn.style.transform = `translate(${(e.clientX - r.left - r.width / 2) * 0.25}px, ${(e.clientY - r.top - r.height / 2) * 0.35}px)`;
+      };
+      const onLeave = () => { btn.style.transform = ""; };
+      btn.addEventListener("pointermove", onMove);
+      btn.addEventListener("pointerleave", onLeave);
+      return { el: btn, onMove, onLeave };
+    });
+    return () => handlers.forEach(({ el, onMove, onLeave }) => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerleave", onLeave);
+    });
+  }, []);
+
+  // 3D card tilt
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+    const onMove = (e: PointerEvent) => {
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width;
+      const y = (e.clientY - r.top) / r.height;
+      card.style.transform = `perspective(1000px) rotateX(${(0.5 - y) * 10}deg) rotateY(${(x - 0.5) * 10}deg)`;
+      card.style.setProperty("--mx", `${x * 100}%`);
+      card.style.setProperty("--my", `${y * 100}%`);
+    };
+    const onLeave = () => { card.style.transform = ""; };
+    card.addEventListener("pointermove", onMove);
+    card.addEventListener("pointerleave", onLeave);
+    return () => { card.removeEventListener("pointermove", onMove); card.removeEventListener("pointerleave", onLeave); };
+  }, []);
+
+  // Feature card mouse-tracking spotlight
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const handlers = Array.from(container.querySelectorAll<HTMLElement>(".lp-feature-card")).map((fc) => {
+      const fn = (e: PointerEvent) => {
+        const r = fc.getBoundingClientRect();
+        fc.style.setProperty("--mx", `${((e.clientX - r.left) / r.width) * 100}%`);
+        fc.style.setProperty("--my", `${((e.clientY - r.top) / r.height) * 100}%`);
+      };
+      fc.addEventListener("pointermove", fn);
+      return { el: fc, fn };
+    });
+    return () => handlers.forEach(({ el, fn }) => el.removeEventListener("pointermove", fn));
+  }, []);
+
+  // Parallax floating badges
+  useEffect(() => {
+    const b1 = badge1Ref.current, b2 = badge2Ref.current;
+    if (!b1 || !b2) return;
+    const onScroll = () => {
+      const y = window.scrollY;
+      b1.style.translate = `0 ${y * -0.08}px`;
+      b2.style.translate = `0 ${y * 0.05}px`;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const outfit = outfits[currentOutfit];
 
   return (
     <div className="lp" ref={containerRef}>
+      {/* CURSOR SPOTLIGHT */}
+      <div className="lp-cursor-spotlight" ref={spotlightRef} />
+
       {/* NAV */}
       <nav ref={navRef} className={`lp-nav${isMobileMenuOpen ? " menu-open" : ""}`}>
         <div className="lp-nav-inner">
@@ -192,14 +300,30 @@ export function LandingPage() {
 
       {/* HERO */}
       <section className="lp-hero">
-        <div className="lp-hero-bg" />
-        <div className="lp-hero-left">
+        <div className="lp-hero-bg">
+          <div className="lp-aurora-blob b1" />
+          <div className="lp-aurora-blob b2" />
+          <div className="lp-aurora-blob b3" />
+          <div className="lp-grid-overlay" />
+        </div>
+
+        <div className="lp-hero-left" style={{ position: "relative", zIndex: 2 }}>
           <div className="lp-hero-tag lp-reveal">
             <div className="lp-hero-tag-dot" />
             Your AI wardrobe assistant
           </div>
-          <h1 className="lp-hero-headline lp-reveal lp-reveal-delay-1">
-            Wear more<br />of what you<br /><em>already own.</em>
+          <h1 className="lp-hero-headline">
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.05s" }}>Wear&nbsp;more</span>
+            </span>
+            <br />
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.15s" }}>of&nbsp;what&nbsp;you</span>
+            </span>
+            <br />
+            <span className="lp-word-reveal">
+              <span style={{ transitionDelay: "0.25s" }}><em>already&nbsp;own.</em></span>
+            </span>
           </h1>
           <p className="lp-hero-sub lp-reveal lp-reveal-delay-2">
             driply turns your closet into daily ready-fits — tuned to the weather, your vibe, and colors that actually match.
@@ -214,9 +338,9 @@ export function LandingPage() {
           </div>
         </div>
 
-        <div className="lp-hero-visual">
+        <div className="lp-hero-visual" style={{ position: "relative", zIndex: 2 }}>
           <div style={{ position: "relative" }}>
-            <div className="lp-outfit-card">
+            <div className="lp-outfit-card" ref={cardRef}>
               <div className="lp-outfit-card-header">
                 <div className="lp-outfit-card-title">{outfit.label}</div>
                 <div className="lp-weather-pill">
@@ -256,17 +380,14 @@ export function LandingPage() {
               </div>
             </div>
 
-            <div className="lp-float-badge">
+            <div className="lp-float-badge" ref={badge1Ref}>
               <div className="lp-float-badge-icon">✦</div>
-              <div>
-                <div className="lp-float-badge-text">AI matched</div>
-                <div className="lp-float-badge-sub">Color Harmony</div>
-              </div>
+              <div className="lp-float-badge-text">AI matched</div>
             </div>
 
-            <div className="lp-float-badge2">
+            <div className="lp-float-badge2" ref={badge2Ref}>
               <StarIcon />
-              Weather ready
+              Weather-ready
             </div>
           </div>
         </div>
@@ -324,47 +445,47 @@ export function LandingPage() {
       {/* FEATURES */}
       <section className="lp-features-section" id="features">
         <div className="lp-features-inner">
-        <div className="lp-features-header">
-          <div>
-            <div className="lp-section-tag lp-reveal">Features</div>
-            <h2 className="lp-section-title lp-reveal lp-reveal-delay-1">
-              Built different,<br />on purpose.
-            </h2>
-          </div>
-          <p className="lp-section-sub lp-reveal lp-reveal-delay-2">
-            Most fashion apps want you to buy more. driply is designed to help you shop less — and look better doing it.
-          </p>
-        </div>
-        <div className="lp-features-grid">
-          <div className="lp-feature-card lp-reveal">
-            <div className="lp-feature-number">01</div>
-            <div className="lp-feature-title">Color-match engine</div>
-            <p className="lp-feature-desc">
-              Analyzes complementary and analogous color relationships across your wardrobe so every fit coheres.
+          <div className="lp-features-header">
+            <div>
+              <div className="lp-section-tag lp-reveal">Features</div>
+              <h2 className="lp-section-title lp-reveal lp-reveal-delay-1">
+                Built different,<br />on purpose.
+              </h2>
+            </div>
+            <p className="lp-section-sub lp-reveal lp-reveal-delay-2">
+              Most fashion apps want you to buy more. driply is designed to help you shop less — and look better doing it.
             </p>
           </div>
-          <div className="lp-feature-card lp-reveal lp-reveal-delay-1">
-            <div className="lp-feature-number">02</div>
-            <div className="lp-feature-title">Live weather layer</div>
-            <p className="lp-feature-desc">
-              Fabric weight and breathability are factored into suggestions. No more dressing wrong for the day.
-            </p>
+          <div className="lp-features-grid">
+            <div className="lp-feature-card lp-reveal">
+              <div className="lp-feature-number">01</div>
+              <div className="lp-feature-title">Color-match engine</div>
+              <p className="lp-feature-desc">
+                Analyzes complementary and analogous color relationships across your wardrobe so every fit coheres.
+              </p>
+            </div>
+            <div className="lp-feature-card lp-reveal lp-reveal-delay-1">
+              <div className="lp-feature-number">02</div>
+              <div className="lp-feature-title">Live weather layer</div>
+              <p className="lp-feature-desc">
+                Fabric weight and breathability are factored into suggestions. No more dressing wrong for the day.
+              </p>
+            </div>
+            <div className="lp-feature-card lp-reveal lp-reveal-delay-2">
+              <div className="lp-feature-number">03</div>
+              <div className="lp-feature-title">Private by design</div>
+              <p className="lp-feature-desc">
+                Your wardrobe data never leaves your device in identifiable form. No selling your style to brands.
+              </p>
+            </div>
+            <div className="lp-feature-card lp-reveal lp-reveal-delay-3">
+              <div className="lp-feature-number">04</div>
+              <div className="lp-feature-title">Vibe tagging</div>
+              <p className="lp-feature-desc">
+                Tag moods — chill, formal, streetwear, vintage — and filter fits by the energy of your day.
+              </p>
+            </div>
           </div>
-          <div className="lp-feature-card lp-reveal lp-reveal-delay-2">
-            <div className="lp-feature-number">03</div>
-            <div className="lp-feature-title">Private by design</div>
-            <p className="lp-feature-desc">
-              Your wardrobe data never leaves your device in identifiable form. No selling your style to brands.
-            </p>
-          </div>
-          <div className="lp-feature-card lp-reveal lp-reveal-delay-3">
-            <div className="lp-feature-number">04</div>
-            <div className="lp-feature-title">Vibe tagging</div>
-            <p className="lp-feature-desc">
-              Tag moods — chill, formal, streetwear, vintage — and filter fits by the energy of your day.
-            </p>
-          </div>
-        </div>
         </div>
       </section>
 
@@ -390,15 +511,15 @@ export function LandingPage() {
 
       {/* FOOTER */}
       <div className="lp-footer-wrap">
-      <footer className="lp-footer">
-        <div className="lp-footer-logo">drip<span>ly</span></div>
-        <p className="lp-footer-copy">© 2026 driply. Made with less.</p>
-        <ul className="lp-footer-links">
-          <li><a href="#">Privacy</a></li>
-          <li><a href="#">Terms</a></li>
-          <li><a href="#">Contact</a></li>
-        </ul>
-      </footer>
+        <footer className="lp-footer">
+          <div className="lp-footer-logo">drip<span>ly</span></div>
+          <p className="lp-footer-copy">© 2026 driply. Made with less.</p>
+          <ul className="lp-footer-links">
+            <li><a href="#">Privacy</a></li>
+            <li><a href="#">Terms</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+        </footer>
       </div>
     </div>
   );
