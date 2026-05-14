@@ -79,6 +79,7 @@ type LocationSource = 'device' | 'saved' | 'manual' | null;
 type UserProfile = {
   displayName: string | null;
   hasTryOnPhoto: boolean;
+  archetypeName?: string | null;
 };
 
 type WornHistoryItem = {
@@ -458,16 +459,18 @@ export default function TodayPage() {
   useEffect(() => {
     if (!authUserId) return;
     let active = true;
-    void fetch('/api/profile')
-      .then((r) => r.json())
-      .then((json) => {
-        if (!active) return;
-        setUserProfile({
-          displayName: json.displayName ?? null,
-          hasTryOnPhoto: Boolean(json.hasTryOnPhoto),
-        });
-      })
-      .catch(() => {});
+    void Promise.all([
+      fetch('/api/profile').then((r) => r.json()).catch(() => ({})),
+      fetch('/api/style-dna').then((r) => r.json()).catch(() => null),
+    ]).then(([profileJson, dnaJson]) => {
+      if (!active) return;
+      setUserProfile({
+        displayName: profileJson.displayName ?? null,
+        hasTryOnPhoto: Boolean(profileJson.hasTryOnPhoto),
+        archetypeName:
+          dnaJson?.exists && dnaJson.textStatus === 'READY' ? (dnaJson.archetypeName ?? null) : null,
+      });
+    });
     void fetch(`/api/outfits?date=${localDateKey}`)
       .then((r) => r.json())
       .then((json) => {
@@ -1147,6 +1150,11 @@ export default function TodayPage() {
                 'Looking sharp ✦'
               )}
             </div>
+            {userProfile?.archetypeName && (
+              <div className="sdna-archetype-badge" style={{ marginTop: 6 }}>
+                ✦ {userProfile.archetypeName}
+              </div>
+            )}
             <div className='score-mini-bars'>
               {[
                 { label: 'Weather', value: current.debugScores.weatherScore },

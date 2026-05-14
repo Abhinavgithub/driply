@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { StyleDnaCard } from "@/components/style-dna-card";
 import { fetchJson } from "@/lib/fetch-utils";
 import { validateImageFile } from "@/lib/file-utils";
 import {
@@ -61,16 +62,37 @@ export default function ProfilePage() {
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSuccess, setPrefsSuccess] = useState(false);
 
+  type DnaData = {
+    exists: boolean;
+    textStatus?: string;
+    moodboardStatus?: string;
+    archetypeName?: string | null;
+    description?: string | null;
+    traits?: string[] | null;
+    colorPalette?: string[] | null;
+    moodboardUrl?: string | null;
+    version?: number;
+  };
+  const [dna, setDna] = useState<DnaData | null>(null);
+  const [dnaGenerating, setDnaGenerating] = useState(false);
+  const [regenRetryAfter, setRegenRetryAfter] = useState<number | null>(null);
+  const dnaUserId = useRef<string | null>(null);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const tryOnInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void (async () => {
       try {
-        const data = await fetchJson<ProfileData>("/api/profile");
-        setProfile(data);
-        setDisplayName(data.displayName ?? "");
-        setLocalPrefs(data.stylePreferences ?? {});
+        const [profileData, dnaData] = await Promise.all([
+          fetchJson<ProfileData & { id?: string }>("/api/profile"),
+          fetchJson<DnaData>("/api/style-dna").catch(() => null),
+        ]);
+        setProfile(profileData);
+        setDisplayName(profileData.displayName ?? "");
+        setLocalPrefs(profileData.stylePreferences ?? {});
+        if (dnaData) setDna(dnaData);
+        if (profileData.id) dnaUserId.current = profileData.id;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -78,6 +100,58 @@ export default function ProfilePage() {
       }
     })();
   }, []);
+
+  // Poll DNA status while generating
+  const dnaStatus = dna?.textStatus;
+  useEffect(() => {
+    if (!dnaGenerating && dnaStatus !== "GENERATING" && dnaStatus !== "PENDING") return;
+    if (!dnaGenerating && !dna) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await fetchJson<DnaData>("/api/style-dna");
+        setDna(data);
+        if (data.textStatus === "READY") {
+          setDnaGenerating(false);
+          clearInterval(interval);
+        }
+      } catch {
+        // Non-fatal
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dnaGenerating, dnaStatus]);
+
+  async function triggerDnaGeneration() {
+    setDnaGenerating(true);
+    try {
+      await fetch("/api/style-dna", { method: "POST" });
+    } catch {
+      setDnaGenerating(false);
+    }
+  }
+
+  async function triggerDnaRegeneration() {
+    setDnaGenerating(true);
+    setRegenRetryAfter(null);
+    try {
+      const res = await fetch("/api/style-dna/regenerate", { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json() as { retryAfter?: number };
+        if (json.retryAfter) setRegenRetryAfter(json.retryAfter);
+        setDnaGenerating(false);
+      }
+    } catch {
+      setDnaGenerating(false);
+    }
+  }
+
+  function formatCountdown(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
 
   // Derived: save button appears only when all 5 answers are filled and at least one differs from saved
   const isComplete = QUIZ_QUESTIONS.every((q) => localPrefs[q.field] !== undefined);
@@ -197,6 +271,49 @@ export default function ProfilePage() {
           Profile saved.
         </section>
       ) : null}
+
+      {/* Style DNA */}
+      <section className="sdna-section">
+        <div className="sdna-section-title">Style DNA</div>
+        {dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
+          <div className="sdna-cta-card">
+            <div className="sdna-cta-icon">✦</div>
+            <p className="sdna-cta-title">Generating your Style DNA...</p>
+            <p className="sdna-cta-desc">This takes about 10–20 seconds. Check back shortly.</p>
+          </div>
+        ) : dna?.exists && dna.textStatus === "READY" && dna.archetypeName ? (
+          <StyleDnaCard
+            archetypeName={dna.archetypeName}
+            description={dna.description ?? ""}
+            traits={dna.traits ?? []}
+            colorPalette={dna.colorPalette ?? []}
+            moodboardUrl={dna.moodboardUrl ?? null}
+            moodboardStatus={dna.moodboardStatus ?? "PENDING"}
+            onRegenerate={triggerDnaRegeneration}
+            regenDisabled={Boolean(regenRetryAfter)}
+            regenCountdown={regenRetryAfter ? formatCountdown(regenRetryAfter) : null}
+            showShareButton
+            userId={dnaUserId.current ?? undefined}
+          />
+        ) : (
+          <div className="sdna-cta-card">
+            <div className="sdna-cta-icon">🧬</div>
+            <p className="sdna-cta-title">Discover your Style DNA</p>
+            <p className="sdna-cta-desc">
+              Complete the style quiz to generate your personalized fashion identity card.
+            </p>
+            {profile?.stylePreferences ? (
+              <button type="button" onClick={triggerDnaGeneration} className="sdna-cta-btn">
+                Generate my Style DNA
+              </button>
+            ) : (
+              <p className="sdna-cta-desc" style={{ fontSize: 12 }}>
+                Complete the style quiz below first.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Account — avatar + display name side by side */}
       <section className="app-card rounded-3xl p-4">

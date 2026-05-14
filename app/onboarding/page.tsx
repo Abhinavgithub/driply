@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { StyleDnaLoading } from "@/components/style-dna-loading";
 import { validateImageFile } from "@/lib/file-utils";
 import { QUIZ_QUESTIONS, type StylePreferences } from "@/lib/style-preferences";
 
@@ -78,6 +79,7 @@ export default function OnboardingPage() {
   const [tryOnUploading, setTryOnUploading] = useState(false);
   const [tryOnError, setTryOnError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showDnaLoading, setShowDnaLoading] = useState(false);
 
   const topInputRef = useRef<HTMLInputElement>(null);
   const bottomInputRef = useRef<HTMLInputElement>(null);
@@ -147,9 +149,10 @@ export default function OnboardingPage() {
     if (quizStep < QUIZ_QUESTIONS.length - 1) {
       setQuizStep(quizStep + 1);
     } else {
-      // All questions answered — save and advance to wardrobe upload
+      // All questions answered — save, trigger DNA generation, show loading screen
       await saveQuizAnswers(updatedAnswers as StylePreferences);
-      setStep(1);
+      void fetch("/api/style-dna", { method: "POST" }).catch(() => {});
+      setShowDnaLoading(true);
     }
   }
 
@@ -259,6 +262,10 @@ export default function OnboardingPage() {
   const isStep2Active = step === 2;
 
   const currentQuestion = QUIZ_QUESTIONS[quizStep];
+
+  if (showDnaLoading) {
+    return <StyleDnaLoading onContinue={() => { setShowDnaLoading(false); setStep(1); }} />;
+  }
 
   return (
     <div className="lp-auth-page">

@@ -34,6 +34,7 @@ export const GET = withAuth(async (currentUser) => {
   ]);
 
   return NextResponse.json({
+    id: currentUser.appUser.id,
     displayName: user?.displayName ?? null,
     avatarUrl: avatarSignedUrl,
     aiTryOnPhotoUrl: tryOnSignedUrl,
