@@ -272,71 +272,30 @@ export default function ProfilePage() {
         </section>
       ) : null}
 
-      {/* Style DNA */}
-      <section className="sdna-section">
-        <div className="sdna-section-title">Style DNA</div>
-        {dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
-          <div className="sdna-cta-card">
-            <div className="sdna-cta-icon">✦</div>
-            <p className="sdna-cta-title">Generating your Style DNA...</p>
-            <p className="sdna-cta-desc">This takes about 10–20 seconds. Check back shortly.</p>
-          </div>
-        ) : dna?.exists && dna.textStatus === "READY" && dna.archetypeName ? (
-          <StyleDnaCard
-            archetypeName={dna.archetypeName}
-            description={dna.description ?? ""}
-            traits={dna.traits ?? []}
-            colorPalette={dna.colorPalette ?? []}
-            moodboardUrl={dna.moodboardUrl ?? null}
-            moodboardStatus={dna.moodboardStatus ?? "PENDING"}
-            onRegenerate={triggerDnaRegeneration}
-            regenDisabled={Boolean(regenRetryAfter)}
-            regenCountdown={regenRetryAfter ? formatCountdown(regenRetryAfter) : null}
-            showShareButton
-            userId={dnaUserId.current ?? undefined}
-          />
-        ) : (
-          <div className="sdna-cta-card">
-            <div className="sdna-cta-icon">🧬</div>
-            <p className="sdna-cta-title">Discover your Style DNA</p>
-            <p className="sdna-cta-desc">
-              Complete the style quiz to generate your personalized fashion identity card.
-            </p>
-            {profile?.stylePreferences ? (
-              <button type="button" onClick={triggerDnaGeneration} className="sdna-cta-btn">
-                Generate my Style DNA
-              </button>
-            ) : (
-              <p className="sdna-cta-desc" style={{ fontSize: 12 }}>
-                Complete the style quiz below first.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
+      {/* Account + Style DNA — side by side on wider screens */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-start">
 
-      {/* Account — avatar + display name side by side */}
-      <section className="app-card rounded-3xl p-4">
-        <h2 className="mb-4 text-base font-medium text-foreground">Account</h2>
-        <div className="flex items-start gap-5">
-          {/* Avatar */}
-          <button
-            type="button"
-            onClick={() => avatarInputRef.current?.click()}
-            aria-label="Upload profile picture"
-            className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
-          >
-            {effectiveAvatarSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={effectiveAvatarSrc} alt="Profile picture" className="h-full w-full object-cover" />
-            ) : (
-              <AvatarPlaceholder letter={displayInitial} />
-            )}
-          </button>
+        {/* Account — compact left column */}
+        <section className="app-card rounded-3xl p-4 md:w-56 md:flex-shrink-0">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Account</h2>
+          <div className="flex flex-col items-center gap-3">
+            {/* Avatar */}
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              aria-label="Upload profile picture"
+              className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
+            >
+              {effectiveAvatarSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={effectiveAvatarSrc} alt="Profile picture" className="h-full w-full object-cover" />
+              ) : (
+                <AvatarPlaceholder letter={displayInitial} />
+              )}
+            </button>
 
-          {/* Name + change photo */}
-          <div className="flex flex-1 flex-col gap-3">
-            <label className="field-label">
+            {/* Name */}
+            <label className="field-label w-full">
               <span>Display name</span>
               <input
                 type="text"
@@ -347,28 +306,74 @@ export default function ProfilePage() {
                 className="input-base"
               />
             </label>
-            <div>
+
+            {/* Upload + save */}
+            <div className="w-full space-y-1">
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                className="button-primary"
+                className="button-primary w-full"
               >
                 {effectiveAvatarSrc ? "Change photo" : "Upload photo"}
               </button>
-              <p className="mt-1 text-xs muted-copy">JPG, PNG, or WEBP · Max 10 MB</p>
-              {avatarError ? <p className="mt-1 text-xs text-danger">{avatarError}</p> : null}
+              <p className="text-center text-xs muted-copy">JPG, PNG or WEBP · 10 MB</p>
+              {avatarError ? <p className="text-xs text-danger">{avatarError}</p> : null}
             </div>
           </div>
-        </div>
 
-        <input
-          ref={avatarInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="sr-only"
-          onChange={onAvatarChange}
-        />
-      </section>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={onAvatarChange}
+          />
+        </section>
+
+        {/* Style DNA — right column */}
+        <section className="sdna-section min-w-0 flex-1">
+          <div className="sdna-section-title">Style DNA</div>
+          {dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">✦</div>
+              <p className="sdna-cta-title">Generating your Style DNA...</p>
+              <p className="sdna-cta-desc">This takes about 10–20 seconds. Check back shortly.</p>
+            </div>
+          ) : dna?.exists && dna.textStatus === "READY" && dna.archetypeName ? (
+            <StyleDnaCard
+              archetypeName={dna.archetypeName}
+              description={dna.description ?? ""}
+              traits={dna.traits ?? []}
+              colorPalette={dna.colorPalette ?? []}
+              moodboardUrl={dna.moodboardUrl ?? null}
+              moodboardStatus={dna.moodboardStatus ?? "PENDING"}
+              onRegenerate={triggerDnaRegeneration}
+              regenDisabled={Boolean(regenRetryAfter)}
+              regenCountdown={regenRetryAfter ? formatCountdown(regenRetryAfter) : null}
+              showShareButton
+              userId={dnaUserId.current ?? undefined}
+            />
+          ) : (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">🧬</div>
+              <p className="sdna-cta-title">Discover your Style DNA</p>
+              <p className="sdna-cta-desc">
+                Complete the style quiz to generate your personalized fashion identity card.
+              </p>
+              {profile?.stylePreferences ? (
+                <button type="button" onClick={triggerDnaGeneration} className="sdna-cta-btn">
+                  Generate my Style DNA
+                </button>
+              ) : (
+                <p className="sdna-cta-desc" style={{ fontSize: 12 }}>
+                  Complete the style quiz below first.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+      </div>
 
       {/* Style Preferences — inside form for visual ordering; type="button" prevents submit */}
       <section className="app-card rounded-3xl p-4">
