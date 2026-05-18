@@ -21,15 +21,28 @@ export const POST = withAuth(async (currentUser) => {
     return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { stylePreferences: true },
-  });
+  const [user, existingDna] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { stylePreferences: true },
+    }),
+    prisma.styleDNA.findUnique({
+      where: { userId },
+      select: { textStatus: true },
+    }),
+  ]);
 
   if (!parseStylePreferences(user?.stylePreferences)) {
     return NextResponse.json(
       { error: "Complete the style quiz before generating your Style DNA." },
       { status: 400 },
+    );
+  }
+
+  if (existingDna?.textStatus === "PENDING" || existingDna?.textStatus === "GENERATING") {
+    return NextResponse.json(
+      { error: "Style DNA generation is already in progress." },
+      { status: 409 },
     );
   }
 
