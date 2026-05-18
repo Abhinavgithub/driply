@@ -29,11 +29,19 @@ export const POST = withAuth(async (currentUser) => {
     );
   }
 
-  // Skip cooldown if previous generation is stuck or failed — the user shouldn't
-  // be locked out just because a failed run stamped lastDnaRegenAt.
-  const isStuck = existingDna?.textStatus === "FAILED" || existingDna?.textStatus === "GENERATING";
+  // Block if a generation is already in progress to prevent duplicate jobs.
+  if (existingDna?.textStatus === "GENERATING") {
+    return NextResponse.json(
+      { error: "Style DNA generation is already in progress." },
+      { status: 409 },
+    );
+  }
 
-  if (!isStuck && user?.lastDnaRegenAt) {
+  // Skip cooldown only if the previous run explicitly failed — the user shouldn't
+  // be locked out just because a failed run stamped lastDnaRegenAt.
+  const bypassCooldown = existingDna?.textStatus === "FAILED";
+
+  if (!bypassCooldown && user?.lastDnaRegenAt) {
     const elapsed = Date.now() - user.lastDnaRegenAt.getTime();
     if (elapsed < REGEN_COOLDOWN_MS) {
       const retryAfter = Math.ceil((REGEN_COOLDOWN_MS - elapsed) / 1000);
