@@ -11,10 +11,16 @@ const REGEN_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const POST = withAuth(async (currentUser) => {
   const userId = currentUser.appUser.id;
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { stylePreferences: true, lastDnaRegenAt: true },
-  });
+  const [user, existingDna] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { stylePreferences: true, lastDnaRegenAt: true },
+    }),
+    prisma.styleDNA.findUnique({
+      where: { userId },
+      select: { textStatus: true },
+    }),
+  ]);
 
   if (!parseStylePreferences(user?.stylePreferences)) {
     return NextResponse.json(
@@ -23,7 +29,11 @@ export const POST = withAuth(async (currentUser) => {
     );
   }
 
-  if (user?.lastDnaRegenAt) {
+  // Skip cooldown if previous generation is stuck or failed — the user shouldn't
+  // be locked out just because a failed run stamped lastDnaRegenAt.
+  const isStuck = existingDna?.textStatus === "FAILED" || existingDna?.textStatus === "GENERATING";
+
+  if (!isStuck && user?.lastDnaRegenAt) {
     const elapsed = Date.now() - user.lastDnaRegenAt.getTime();
     if (elapsed < REGEN_COOLDOWN_MS) {
       const retryAfter = Math.ceil((REGEN_COOLDOWN_MS - elapsed) / 1000);

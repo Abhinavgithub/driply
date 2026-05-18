@@ -1,12 +1,12 @@
 "use client";
 
+import { hexToColorName } from "@/lib/style-dna-prompt";
+
 type StyleDnaCardProps = {
   archetypeName: string;
   description: string;
   traits: string[];
   colorPalette: string[];
-  moodboardUrl: string | null;
-  moodboardStatus: string;
   onRegenerate?: () => void;
   regenDisabled?: boolean;
   regenCountdown?: string | null;
@@ -19,8 +19,6 @@ export function StyleDnaCard({
   description,
   traits,
   colorPalette,
-  moodboardUrl,
-  moodboardStatus,
   onRegenerate,
   regenDisabled,
   regenCountdown,
@@ -42,24 +40,6 @@ export function StyleDnaCard({
 
   return (
     <div className="sdna-card">
-      {/* Moodboard */}
-      <div className="sdna-moodboard">
-        {moodboardUrl && moodboardStatus === "READY" ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={moodboardUrl} alt="Style moodboard" className="sdna-moodboard-img" />
-        ) : moodboardStatus === "GENERATING" || moodboardStatus === "PENDING" ? (
-          <div className="sdna-moodboard-shimmer" />
-        ) : (
-          <div
-            className="sdna-moodboard-gradient"
-            style={{
-              background: `linear-gradient(135deg, ${palette.join(", ")})`,
-            }}
-          />
-        )}
-        <div className="sdna-moodboard-overlay" />
-      </div>
-
       {/* Content */}
       <div className="sdna-content">
         <div className="sdna-label">STYLE DNA</div>
@@ -82,7 +62,7 @@ export function StyleDnaCard({
               key={color}
               className="sdna-swatch"
               style={{ background: color }}
-              title={color}
+              data-color-name={hexToColorName(color).replace(/\b\w/g, (c) => c.toUpperCase())}
             />
           ))}
         </div>

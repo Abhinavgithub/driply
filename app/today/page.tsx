@@ -482,7 +482,7 @@ export default function TodayPage() {
     return () => {
       active = false;
     };
-  }, [authUserId]);
+  }, [authUserId, localDateKey]);
 
   // Score ring animation
   useEffect(() => {

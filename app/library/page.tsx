@@ -281,14 +281,6 @@ export default function LibraryPage() {
     }
   }
 
-  const missingCategories = useMemo(
-    () => ({
-      top: grouped.TOP.length === 0,
-      bottom: grouped.BOTTOM.length === 0,
-      shoe: grouped.SHOE.length === 0,
-    }),
-    [grouped],
-  );
   return (
     <div className="space-y-6">
       {error ? (

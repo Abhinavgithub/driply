@@ -130,38 +130,57 @@ export function buildStyleDnaImagePrompt(dna: {
   return `Fashion moodboard, editorial magazine spread aesthetic. Style archetype: ${dna.archetypeName}. Mood and visual style: ${hints}. Key fashion elements: ${traits}. Color palette: predominantly ${namedColors}. Composition: asymmetric grid, premium fashion-tech look, clean geometric shapes, no faces, no people, no readable text, no watermarks, no brand logos. Pure fashion objects, textures, and abstract shapes only. Ultra high quality, 8K detail.`;
 }
 
-function hexToColorName(hex: string): string {
+export function hexToColorName(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
 
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
+  const chroma = max - min;
   const l = (max + min) / 2 / 255;
+  const s = chroma === 0 ? 0 : chroma / (1 - Math.abs(2 * l - 1)) / 255;
 
-  if (l < 0.15) return "deep black";
-  if (l > 0.90) return "pure white";
-  if (max - min < 20) {
-    if (l < 0.35) return "dark grey";
-    if (l > 0.7) return "light grey";
-    return "mid grey";
+  // Achromatic / near-neutral (low saturation)
+  if (s < 0.12) {
+    if (l < 0.10) return "jet black";
+    if (l < 0.22) return "charcoal";
+    if (l < 0.38) return "dark grey";
+    if (l < 0.54) return "mid grey";
+    if (l < 0.68) return "cool grey";
+    if (l < 0.80) return "silver";
+    // Distinguish warm near-whites (cream/ivory) from cool near-whites
+    if (r > b + 10) return l > 0.90 ? "ivory" : "warm white";
+    return l > 0.90 ? "pure white" : "pearl";
   }
 
-  if (r > g && r > b) {
-    if (g > b * 1.5) return "warm amber";
-    if (b > g) return "rose red";
-    return r > 200 && g > 100 ? "warm coral" : "deep red";
+  // Compute hue (0–360)
+  let hue = 0;
+  if (max === r) hue = ((g - b) / chroma + 6) % 6 * 60;
+  else if (max === g) hue = ((b - r) / chroma + 2) * 60;
+  else hue = ((r - g) / chroma + 4) * 60;
+
+  // Light / pastel range
+  if (l > 0.72) {
+    if (hue < 30 || hue >= 330) return "blush";
+    if (hue < 65) return "cream";
+    if (hue < 150) return "sage";
+    if (hue < 255) return "powder blue";
+    return "lavender";
   }
-  if (g > r && g > b) {
-    if (r > b) return "olive green";
-    return g > 180 ? "fresh mint" : "forest green";
-  }
-  if (b > r && b > g) {
-    if (r > g * 1.2) return "muted violet";
-    return b > 180 ? "sky blue" : "navy blue";
-  }
-  if (r > 180 && g > 150 && b < 100) return "warm camel";
-  return "neutral";
+
+  // Saturated / mid-dark
+  if (hue < 20 || hue >= 345) return l < 0.30 ? "deep red" : "red";
+  if (hue < 40) return "burnt orange";
+  if (hue < 65) return "warm amber";
+  if (hue < 80) return "gold";
+  if (hue < 100) return "olive";
+  if (hue < 155) return l < 0.35 ? "forest green" : "green";
+  if (hue < 195) return l < 0.35 ? "teal" : "seafoam";
+  if (hue < 255) return l < 0.28 ? "navy" : "sky blue";
+  if (hue < 285) return l < 0.28 ? "deep indigo" : "periwinkle";
+  if (hue < 320) return l < 0.35 ? "plum" : "violet";
+  return l < 0.35 ? "wine" : "mauve";
 }
 
 export function buildRuleBasedDna(prefs: StylePreferences): {

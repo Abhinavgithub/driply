@@ -65,16 +65,15 @@ export default function ProfilePage() {
   type DnaData = {
     exists: boolean;
     textStatus?: string;
-    moodboardStatus?: string;
     archetypeName?: string | null;
     description?: string | null;
     traits?: string[] | null;
     colorPalette?: string[] | null;
-    moodboardUrl?: string | null;
     version?: number;
   };
   const [dna, setDna] = useState<DnaData | null>(null);
   const [dnaGenerating, setDnaGenerating] = useState(false);
+  const [dnaError, setDnaError] = useState(false);
   const [regenRetryAfter, setRegenRetryAfter] = useState<number | null>(null);
   const dnaUserId = useRef<string | null>(null);
 
@@ -106,12 +105,19 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!dnaGenerating && dnaStatus !== "GENERATING" && dnaStatus !== "PENDING") return;
     if (!dnaGenerating && !dna) return;
+    const MAX_POLLS = 15; // 30s
+    let attempts = 0;
     const interval = setInterval(async () => {
+      attempts++;
       try {
         const data = await fetchJson<DnaData>("/api/style-dna");
         setDna(data);
         if (data.textStatus === "READY") {
           setDnaGenerating(false);
+          clearInterval(interval);
+        } else if (data.textStatus === "FAILED" || attempts >= MAX_POLLS) {
+          setDnaGenerating(false);
+          setDnaError(true);
           clearInterval(interval);
         }
       } catch {
@@ -124,6 +130,7 @@ export default function ProfilePage() {
 
   async function triggerDnaGeneration() {
     setDnaGenerating(true);
+    setDnaError(false);
     try {
       await fetch("/api/style-dna", { method: "POST" });
     } catch {
@@ -133,6 +140,7 @@ export default function ProfilePage() {
 
   async function triggerDnaRegeneration() {
     setDnaGenerating(true);
+    setDnaError(false);
     setRegenRetryAfter(null);
     try {
       const res = await fetch("/api/style-dna/regenerate", { method: "POST" });
@@ -273,10 +281,10 @@ export default function ProfilePage() {
       ) : null}
 
       {/* Account + Style DNA — side by side on wider screens */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-start">
+      <div className="grid gap-4 md:[grid-template-columns:14rem_1fr]">
 
         {/* Account — compact left column */}
-        <section className="app-card rounded-3xl p-4 md:w-56 md:flex-shrink-0">
+        <section className="app-card rounded-3xl p-4">
           <h2 className="mb-3 text-sm font-semibold text-foreground">Account</h2>
           <div className="flex flex-col items-center gap-3">
             {/* Avatar */}
@@ -331,9 +339,17 @@ export default function ProfilePage() {
         </section>
 
         {/* Style DNA — right column */}
-        <section className="sdna-section min-w-0 flex-1">
-          <div className="sdna-section-title">Style DNA</div>
-          {dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
+        <section className="sdna-section min-w-0">
+          {dnaError ? (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">✦</div>
+              <p className="sdna-cta-title">Generation failed</p>
+              <p className="sdna-cta-desc">Something went wrong. Please try again.</p>
+              <button type="button" onClick={triggerDnaRegeneration} className="sdna-cta-btn">
+                Try again
+              </button>
+            </div>
+          ) : dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
             <div className="sdna-cta-card">
               <div className="sdna-cta-icon">✦</div>
               <p className="sdna-cta-title">Generating your Style DNA...</p>
@@ -345,8 +361,6 @@ export default function ProfilePage() {
               description={dna.description ?? ""}
               traits={dna.traits ?? []}
               colorPalette={dna.colorPalette ?? []}
-              moodboardUrl={dna.moodboardUrl ?? null}
-              moodboardStatus={dna.moodboardStatus ?? "PENDING"}
               onRegenerate={triggerDnaRegeneration}
               regenDisabled={Boolean(regenRetryAfter)}
               regenCountdown={regenRetryAfter ? formatCountdown(regenRetryAfter) : null}

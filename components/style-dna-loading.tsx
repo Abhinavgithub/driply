@@ -7,12 +7,10 @@ import { StyleDnaCard } from "@/components/style-dna-card";
 type DnaStatus = {
   exists: boolean;
   textStatus?: string;
-  moodboardStatus?: string;
   archetypeName?: string | null;
   description?: string | null;
   traits?: string[] | null;
   colorPalette?: string[] | null;
-  moodboardUrl?: string | null;
   version?: number;
 };
 
@@ -104,8 +102,6 @@ export function StyleDnaLoading({ onContinue }: StyleDnaLoadingProps) {
           description={dna.description ?? ""}
           traits={dna.traits ?? []}
           colorPalette={dna.colorPalette ?? []}
-          moodboardUrl={dna.moodboardUrl ?? null}
-          moodboardStatus={dna.moodboardStatus ?? "PENDING"}
         />
         <button
           type="button"
