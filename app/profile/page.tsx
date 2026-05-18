@@ -77,6 +77,13 @@ export default function ProfilePage() {
   const [regenRetryAfter, setRegenRetryAfter] = useState<number | null>(null);
   const dnaUserId = useRef<string | null>(null);
 
+  // Auto-clear the cooldown lock once the retry window elapses so the button re-enables.
+  useEffect(() => {
+    if (!regenRetryAfter) return;
+    const timer = setTimeout(() => setRegenRetryAfter(null), regenRetryAfter * 1000);
+    return () => clearTimeout(timer);
+  }, [regenRetryAfter]);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const tryOnInputRef = useRef<HTMLInputElement>(null);
 

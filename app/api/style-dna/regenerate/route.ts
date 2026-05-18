@@ -46,7 +46,7 @@ export const POST = withAuth(async (currentUser) => {
         }),
       ]);
 
-      if (txExisting?.textStatus === "GENERATING") {
+      if (txExisting?.textStatus === "PENDING" || txExisting?.textStatus === "GENERATING") {
         throw new DnaInProgressError();
       }
 
