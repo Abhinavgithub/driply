@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { StyleDnaCard } from "@/components/style-dna-card";
 import { fetchJson } from "@/lib/fetch-utils";
 import { validateImageFile } from "@/lib/file-utils";
 import {
@@ -61,16 +62,43 @@ export default function ProfilePage() {
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsSuccess, setPrefsSuccess] = useState(false);
 
+  type DnaData = {
+    exists: boolean;
+    textStatus?: string;
+    archetypeName?: string | null;
+    description?: string | null;
+    traits?: string[] | null;
+    colorPalette?: string[] | null;
+    version?: number;
+  };
+  const [dna, setDna] = useState<DnaData | null>(null);
+  const [dnaGenerating, setDnaGenerating] = useState(false);
+  const [dnaError, setDnaError] = useState(false);
+  const [regenRetryAfter, setRegenRetryAfter] = useState<number | null>(null);
+  const dnaUserId = useRef<string | null>(null);
+
+  // Auto-clear the cooldown lock once the retry window elapses so the button re-enables.
+  useEffect(() => {
+    if (!regenRetryAfter) return;
+    const timer = setTimeout(() => setRegenRetryAfter(null), regenRetryAfter * 1000);
+    return () => clearTimeout(timer);
+  }, [regenRetryAfter]);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const tryOnInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void (async () => {
       try {
-        const data = await fetchJson<ProfileData>("/api/profile");
-        setProfile(data);
-        setDisplayName(data.displayName ?? "");
-        setLocalPrefs(data.stylePreferences ?? {});
+        const [profileData, dnaData] = await Promise.all([
+          fetchJson<ProfileData & { id?: string }>("/api/profile"),
+          fetchJson<DnaData>("/api/style-dna").catch(() => null),
+        ]);
+        setProfile(profileData);
+        setDisplayName(profileData.displayName ?? "");
+        setLocalPrefs(profileData.stylePreferences ?? {});
+        if (dnaData) setDna(dnaData);
+        if (profileData.id) dnaUserId.current = profileData.id;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -78,6 +106,67 @@ export default function ProfilePage() {
       }
     })();
   }, []);
+
+  // Poll DNA status while generating
+  const dnaStatus = dna?.textStatus;
+  useEffect(() => {
+    if (!dnaGenerating && dnaStatus !== "GENERATING" && dnaStatus !== "PENDING") return;
+    if (!dnaGenerating && !dna) return;
+    const MAX_POLLS = 15; // 30s
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const data = await fetchJson<DnaData>("/api/style-dna");
+        setDna(data);
+        if (data.textStatus === "READY") {
+          setDnaGenerating(false);
+          clearInterval(interval);
+        } else if (data.textStatus === "FAILED" || attempts >= MAX_POLLS) {
+          setDnaGenerating(false);
+          setDnaError(true);
+          clearInterval(interval);
+        }
+      } catch {
+        // Non-fatal
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dnaGenerating, dnaStatus]);
+
+  async function triggerDnaGeneration() {
+    setDnaGenerating(true);
+    setDnaError(false);
+    try {
+      await fetch("/api/style-dna", { method: "POST" });
+    } catch {
+      setDnaGenerating(false);
+    }
+  }
+
+  async function triggerDnaRegeneration() {
+    setDnaGenerating(true);
+    setDnaError(false);
+    setRegenRetryAfter(null);
+    try {
+      const res = await fetch("/api/style-dna/regenerate", { method: "POST" });
+      if (!res.ok) {
+        const json = await res.json() as { retryAfter?: number };
+        if (json.retryAfter) setRegenRetryAfter(json.retryAfter);
+        setDnaGenerating(false);
+      }
+    } catch {
+      setDnaGenerating(false);
+    }
+  }
+
+  function formatCountdown(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
 
   // Derived: save button appears only when all 5 answers are filled and at least one differs from saved
   const isComplete = QUIZ_QUESTIONS.every((q) => localPrefs[q.field] !== undefined);
@@ -198,28 +287,30 @@ export default function ProfilePage() {
         </section>
       ) : null}
 
-      {/* Account — avatar + display name side by side */}
-      <section className="app-card rounded-3xl p-4">
-        <h2 className="mb-4 text-base font-medium text-foreground">Account</h2>
-        <div className="flex items-start gap-5">
-          {/* Avatar */}
-          <button
-            type="button"
-            onClick={() => avatarInputRef.current?.click()}
-            aria-label="Upload profile picture"
-            className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
-          >
-            {effectiveAvatarSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={effectiveAvatarSrc} alt="Profile picture" className="h-full w-full object-cover" />
-            ) : (
-              <AvatarPlaceholder letter={displayInitial} />
-            )}
-          </button>
+      {/* Account + Style DNA — side by side on wider screens */}
+      <div className="grid gap-4 md:[grid-template-columns:14rem_1fr]">
 
-          {/* Name + change photo */}
-          <div className="flex flex-1 flex-col gap-3">
-            <label className="field-label">
+        {/* Account — compact left column */}
+        <section className="app-card rounded-3xl p-4">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Account</h2>
+          <div className="flex flex-col items-center gap-3">
+            {/* Avatar */}
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              aria-label="Upload profile picture"
+              className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
+            >
+              {effectiveAvatarSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={effectiveAvatarSrc} alt="Profile picture" className="h-full w-full object-cover" />
+              ) : (
+                <AvatarPlaceholder letter={displayInitial} />
+              )}
+            </button>
+
+            {/* Name */}
+            <label className="field-label w-full">
               <span>Display name</span>
               <input
                 type="text"
@@ -230,28 +321,80 @@ export default function ProfilePage() {
                 className="input-base"
               />
             </label>
-            <div>
+
+            {/* Upload + save */}
+            <div className="w-full space-y-1">
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                className="button-primary"
+                className="button-primary w-full"
               >
                 {effectiveAvatarSrc ? "Change photo" : "Upload photo"}
               </button>
-              <p className="mt-1 text-xs muted-copy">JPG, PNG, or WEBP · Max 10 MB</p>
-              {avatarError ? <p className="mt-1 text-xs text-danger">{avatarError}</p> : null}
+              <p className="text-center text-xs muted-copy">JPG, PNG or WEBP · 10 MB</p>
+              {avatarError ? <p className="text-xs text-danger">{avatarError}</p> : null}
             </div>
           </div>
-        </div>
 
-        <input
-          ref={avatarInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="sr-only"
-          onChange={onAvatarChange}
-        />
-      </section>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="sr-only"
+            onChange={onAvatarChange}
+          />
+        </section>
+
+        {/* Style DNA — right column */}
+        <section className="sdna-section min-w-0">
+          {dnaError ? (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">✦</div>
+              <p className="sdna-cta-title">Generation failed</p>
+              <p className="sdna-cta-desc">Something went wrong. Please try again.</p>
+              <button type="button" onClick={triggerDnaRegeneration} className="sdna-cta-btn">
+                Try again
+              </button>
+            </div>
+          ) : dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">✦</div>
+              <p className="sdna-cta-title">Generating your Style DNA...</p>
+              <p className="sdna-cta-desc">This takes about 10–20 seconds. Check back shortly.</p>
+            </div>
+          ) : dna?.exists && dna.textStatus === "READY" && dna.archetypeName ? (
+            <StyleDnaCard
+              archetypeName={dna.archetypeName}
+              description={dna.description ?? ""}
+              traits={dna.traits ?? []}
+              colorPalette={dna.colorPalette ?? []}
+              onRegenerate={triggerDnaRegeneration}
+              regenDisabled={Boolean(regenRetryAfter)}
+              regenCountdown={regenRetryAfter ? formatCountdown(regenRetryAfter) : null}
+              showShareButton
+              userId={dnaUserId.current ?? undefined}
+            />
+          ) : (
+            <div className="sdna-cta-card">
+              <div className="sdna-cta-icon">🧬</div>
+              <p className="sdna-cta-title">Discover your Style DNA</p>
+              <p className="sdna-cta-desc">
+                Complete the style quiz to generate your personalized fashion identity card.
+              </p>
+              {profile?.stylePreferences ? (
+                <button type="button" onClick={triggerDnaGeneration} className="sdna-cta-btn">
+                  Generate my Style DNA
+                </button>
+              ) : (
+                <p className="sdna-cta-desc" style={{ fontSize: 12 }}>
+                  Complete the style quiz below first.
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
+      </div>
 
       {/* Style Preferences — inside form for visual ordering; type="button" prevents submit */}
       <section className="app-card rounded-3xl p-4">

@@ -72,6 +72,13 @@ enum MetadataSource {
   MIXED
 }
 
+enum DnaAssetStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
 model User {
   id                   String          @id @db.Uuid
   email                String?         @unique
@@ -82,10 +89,37 @@ model User {
   aiTryOnPhotoUrl      String?
   aiTryOnPhotoMimeType String?
   stylePreferences     Json?
+  lastDnaRegenAt       DateTime?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
   items                Item[]
   history              OutfitHistory[]
+  styleDna             StyleDNA?
+}
+
+model StyleDNA {
+  id                   String         @id @default(cuid())
+  userId               String         @db.Uuid @unique
+  version              Int            @default(1)
+  archetypeName        String
+  description          String
+  traits               String[]
+  colorPalette         String[]
+  imagePromptHints     String[]
+  promptHash           String?
+  moodboardUrl         String?
+  moodboardStatus      DnaAssetStatus @default(PENDING)
+  textStatus           DnaAssetStatus @default(PENDING)
+  generationTrigger    String?
+  promptSnapshot       Json?
+  generatedAt          DateTime?
+  moodboardGeneratedAt DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([promptHash])
 }
 
 model Item {
