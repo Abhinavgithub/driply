@@ -32,6 +32,7 @@ export function StyleDnaLoading({ onContinue }: StyleDnaLoadingProps) {
   const [messageIndex, setMessageIndex] = useState(0);
   const [dna, setDna] = useState<DnaStatus | null>(null);
   const [revealed, setRevealed] = useState(false);
+  const [generationFailed, setGenerationFailed] = useState(false);
   const [paletteVisible, setPaletteVisible] = useState<boolean[]>([]);
   const pollCount = useRef(0);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -75,8 +76,10 @@ export function StyleDnaLoading({ onContinue }: StyleDnaLoadingProps) {
           return;
         }
 
-        if (pollCount.current >= MAX_POLL_ATTEMPTS) {
+        if (data.textStatus === "FAILED" || pollCount.current >= MAX_POLL_ATTEMPTS) {
           if (pollTimer.current) clearInterval(pollTimer.current);
+          if (messageTimer.current) clearInterval(messageTimer.current);
+          setGenerationFailed(true);
         }
       } catch {
         // Non-fatal
@@ -93,6 +96,24 @@ export function StyleDnaLoading({ onContinue }: StyleDnaLoadingProps) {
 
   const isTextReady = dna?.exists && dna.textStatus === "READY";
   const palette = dna?.colorPalette ?? [];
+
+  if (generationFailed) {
+    return (
+      <div className="sdna-reveal-screen">
+        <div className="sdna-loading-content" style={{ textAlign: "center" }}>
+          <p className="sdna-cta-title" style={{ color: "#fff", marginBottom: 8 }}>
+            Couldn&apos;t generate your Style DNA
+          </p>
+          <p className="sdna-loading-message" style={{ marginBottom: 24 }}>
+            No worries — you can generate it later from your profile.
+          </p>
+          <button type="button" onClick={onContinue} className="sdna-continue-btn">
+            Continue to wardrobe →
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (revealed && isTextReady && dna) {
     return (
