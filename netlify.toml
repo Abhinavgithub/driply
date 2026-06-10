@@ -1,0 +1,15 @@
+[build]
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# The try-on worker imports the app's lib/ modules, which pull in native and
+# generated packages that esbuild must not inline.
+[functions."tryon-process-background"]
+  external_node_modules = ["sharp", "@prisma/client", "openai", "@huggingface/inference"]
+  included_files = ["node_modules/.prisma/**", "prisma/schema.prisma"]

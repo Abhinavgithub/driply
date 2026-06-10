@@ -2,146 +2,139 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { withAuth } from "@/lib/api-guard";
-import { generateTryOnImage, isAiTryOnEnabled, normalizeTryOnErrorCode } from "@/lib/gemini-tryon";
-import { generateFluxTryOnImage, getTryOnProvider, isFluxTryOnEnabled } from "@/lib/flux-tryon";
-import { generateOpenAITryOnImage, isOpenAITryOnEnabled } from "@/lib/openai-tryon";
+import { isAiTryOnEnabled } from "@/lib/gemini-tryon";
+import { getTryOnProvider, isFluxTryOnEnabled } from "@/lib/flux-tryon";
+import { isOpenAITryOnEnabled } from "@/lib/openai-tryon";
 import { prisma } from "@/lib/prisma";
-import { downloadStorageObject } from "@/lib/profile-media";
-import { buildFluxTryOnPrompt, buildOpenAITryOnPrompt, buildTryOnPrompt } from "@/lib/tryon-prompt";
+import { getSignedTryOnResultUrl, pruneOldTryOnJobs } from "@/lib/tryon-job";
+import { triggerTryOnJobProcessing } from "@/lib/tryon-trigger";
 
-const RequestSchema = z.object({
+const CreateSchema = z.object({
   topItemId: z.string().min(1),
   bottomItemId: z.string().min(1),
   shoeItemId: z.string().min(1),
 });
 
+// Generation takes 45–120s depending on provider; a job stuck in
+// PENDING/RUNNING for longer than this is reported as failed to the client.
+const JOB_STALE_AFTER_MS = 4 * 60 * 1000;
+
+/**
+ * Creates an async try-on job and returns its id immediately. Generation runs
+ * in a background worker (see lib/tryon-job.ts); poll GET /api/tryon?jobId=…
+ * for the result.
+ */
 export const POST = withAuth(
   async (currentUser, req) => {
-  const provider = await getTryOnProvider();
+    const provider = await getTryOnProvider();
 
-  const enabled =
-    provider === "flux"   ? await isFluxTryOnEnabled()   :
-    provider === "openai" ? await isOpenAITryOnEnabled()  :
-                            await isAiTryOnEnabled();
-  if (!enabled) {
-    return NextResponse.json({ ok: false, reason: "tryon_disabled" });
-  }
-
-  const json = await req.json().catch(() => null);
-  const parsed = RequestSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Expected topItemId, bottomItemId, shoeItemId." }, { status: 400 });
-  }
-
-  const userId = currentUser.appUser.id;
-
-  const userRecord = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { displayName: true, aiTryOnPhotoUrl: true },
-  });
-
-  // FLUX is text-only — no reference photo needed. Gemini and OpenAI require it.
-  if ((provider === "gemini" || provider === "openai") && !userRecord?.aiTryOnPhotoUrl) {
-    return NextResponse.json({ ok: false, reason: "no_try_on_photo" });
-  }
-
-  const { topItemId, bottomItemId, shoeItemId } = parsed.data;
-  const items = await prisma.item.findMany({
-    where: {
-      id: { in: [topItemId, bottomItemId, shoeItemId] },
-      userId,
-    },
-    select: {
-      id: true,
-      kind: true,
-      subtype: true,
-      colorFamily: true,
-      visualSummary: true,
-      photoUrl: true,
-    },
-  });
-
-  if (items.length !== 3) {
-    return NextResponse.json({ error: "One or more items not found." }, { status: 404 });
-  }
-
-  const top = items.find((i) => i.id === topItemId);
-  const bottom = items.find((i) => i.id === bottomItemId);
-  const shoe = items.find((i) => i.id === shoeItemId);
-
-  if (!top || !bottom || !shoe) {
-    return NextResponse.json({ error: "Item mismatch." }, { status: 400 });
-  }
-
-  const itemMeta = [
-    { kind: top.kind, subtype: top.subtype, colorFamily: top.colorFamily, visualSummary: top.visualSummary },
-    { kind: bottom.kind, subtype: bottom.subtype, colorFamily: bottom.colorFamily, visualSummary: bottom.visualSummary },
-    { kind: shoe.kind, subtype: shoe.subtype, colorFamily: shoe.colorFamily, visualSummary: shoe.visualSummary },
-  ] as const;
-
-  try {
-    if (provider === "flux") {
-      const prompt = buildFluxTryOnPrompt({ items: itemMeta });
-      const result = await generateFluxTryOnImage({ prompt });
-      return NextResponse.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType, provider: "flux" });
+    const enabled =
+      provider === "flux"   ? await isFluxTryOnEnabled()   :
+      provider === "openai" ? await isOpenAITryOnEnabled()  :
+                              await isAiTryOnEnabled();
+    if (!enabled) {
+      return NextResponse.json({ ok: false, reason: "tryon_disabled" });
     }
 
-    // OpenAI gpt-image-2 — download reference photo + clothing images
-    if (provider === "openai") {
-      const [tryOnPhotoBytes, topBytes, bottomBytes, shoeBytes] = await Promise.all([
-        downloadStorageObject(userRecord!.aiTryOnPhotoUrl),
-        downloadStorageObject(top.photoUrl),
-        downloadStorageObject(bottom.photoUrl),
-        downloadStorageObject(shoe.photoUrl),
-      ]);
-
-      if (!tryOnPhotoBytes) {
-        return NextResponse.json({ ok: false, reason: "try_on_photo_unavailable" });
-      }
-
-      const clothingImages = [topBytes, bottomBytes, shoeBytes]
-        .filter((b): b is Buffer => b !== null)
-        .map((bytes) => ({ bytes }));
-
-      if (clothingImages.length === 0) {
-        return NextResponse.json({ ok: false, reason: "clothing_images_unavailable" });
-      }
-
-      const prompt = buildOpenAITryOnPrompt({ displayName: userRecord!.displayName, items: itemMeta });
-      const result = await generateOpenAITryOnImage({ tryOnPhotoBytes, clothingImages, prompt });
-      return NextResponse.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType, provider: "openai" });
+    const json = await req.json().catch(() => null);
+    const parsed = CreateSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Expected topItemId, bottomItemId, shoeItemId." }, { status: 400 });
     }
 
-    // Gemini — download reference photo + clothing images
-    const [tryOnPhotoBytes, topBytes, bottomBytes, shoeBytes] = await Promise.all([
-      downloadStorageObject(userRecord!.aiTryOnPhotoUrl),
-      downloadStorageObject(top.photoUrl),
-      downloadStorageObject(bottom.photoUrl),
-      downloadStorageObject(shoe.photoUrl),
-    ]);
+    const userId = currentUser.appUser.id;
+    const { topItemId, bottomItemId, shoeItemId } = parsed.data;
 
-    if (!tryOnPhotoBytes) {
-      return NextResponse.json({ ok: false, reason: "try_on_photo_unavailable" });
+    const userRecord = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { aiTryOnPhotoUrl: true },
+    });
+
+    // FLUX is text-only — no reference photo needed. Gemini and OpenAI require it.
+    if ((provider === "gemini" || provider === "openai") && !userRecord?.aiTryOnPhotoUrl) {
+      return NextResponse.json({ ok: false, reason: "no_try_on_photo" });
     }
 
-    const clothingImages = [
-      topBytes ? { bytes: topBytes } : null,
-      bottomBytes ? { bytes: bottomBytes } : null,
-      shoeBytes ? { bytes: shoeBytes } : null,
-    ].filter((x): x is { bytes: Buffer } => x !== null);
-
-    if (clothingImages.length === 0) {
-      return NextResponse.json({ ok: false, reason: "clothing_images_unavailable" });
+    const ownedCount = await prisma.item.count({
+      where: { id: { in: [topItemId, bottomItemId, shoeItemId] }, userId },
+    });
+    if (ownedCount !== 3) {
+      return NextResponse.json({ error: "One or more items not found." }, { status: 404 });
     }
 
-    const prompt = buildTryOnPrompt({ displayName: userRecord!.displayName, items: itemMeta });
-    const result = await generateTryOnImage({ tryOnPhotoBytes, clothingImages, prompt });
-    return NextResponse.json({ ok: true, imageBase64: result.imageBase64, mimeType: result.mimeType, provider: "gemini" });
-  } catch (error) {
-    const code = normalizeTryOnErrorCode(error);
-    console.warn("[api/tryon] generation failed", { provider, code, error: error instanceof Error ? error.message : String(error) });
-    return NextResponse.json({ ok: false, reason: "generation_failed", code });
-  }
+    // The client retries on failure; reuse an in-flight job for the same
+    // outfit instead of spawning a duplicate generation.
+    const existing = await prisma.tryOnJob.findFirst({
+      where: {
+        userId,
+        topItemId,
+        bottomItemId,
+        shoeItemId,
+        provider,
+        status: { in: ["PENDING", "RUNNING"] },
+        createdAt: { gte: new Date(Date.now() - JOB_STALE_AFTER_MS) },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json({ ok: true, jobId: existing.id, status: "pending" });
+    }
+
+    await pruneOldTryOnJobs(userId).catch(() => {});
+
+    const job = await prisma.tryOnJob.create({
+      data: { userId, topItemId, bottomItemId, shoeItemId, provider },
+      select: { id: true },
+    });
+
+    await triggerTryOnJobProcessing(job.id);
+
+    return NextResponse.json({ ok: true, jobId: job.id, status: "pending" });
   },
   { key: (u) => `tryon:post:${u.appUser.id}`, max: 10 },
+);
+
+/** Poll a try-on job. Returns a signed image URL once the job is READY. */
+export const GET = withAuth(
+  async (currentUser, req) => {
+    const jobId = new URL(req.url).searchParams.get("jobId");
+    if (!jobId) {
+      return NextResponse.json({ error: "Expected jobId query parameter." }, { status: 400 });
+    }
+
+    const job = await prisma.tryOnJob.findFirst({
+      where: { id: jobId, userId: currentUser.appUser.id },
+    });
+    if (!job) {
+      return NextResponse.json({ error: "Job not found." }, { status: 404 });
+    }
+
+    if (job.status === "READY" && job.resultPath) {
+      const imageUrl = await getSignedTryOnResultUrl(job.resultPath);
+      if (!imageUrl) {
+        return NextResponse.json({ ok: false, status: "failed", reason: "result_unavailable" });
+      }
+      return NextResponse.json({
+        ok: true,
+        status: "ready",
+        imageUrl,
+        mimeType: job.resultMimeType ?? "image/png",
+        provider: job.provider,
+      });
+    }
+
+    if (job.status === "FAILED") {
+      return NextResponse.json({ ok: false, status: "failed", reason: job.errorCode ?? "generation_failed" });
+    }
+
+    // A worker that died mid-job leaves the row PENDING/RUNNING forever;
+    // report it as failed once it is clearly past any provider timeout.
+    if (job.createdAt.getTime() < Date.now() - JOB_STALE_AFTER_MS) {
+      return NextResponse.json({ ok: false, status: "failed", reason: "timed_out" });
+    }
+
+    return NextResponse.json({ ok: true, status: job.status === "RUNNING" ? "running" : "pending" });
+  },
+  { key: (u) => `tryon:get:${u.appUser.id}`, max: 60 },
 );
