@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 
 type TryOnItem = {
@@ -31,15 +31,64 @@ export type TryOnPreviewHandle = {
 type Phase = "idle" | "loading" | "success" | "fallback";
 
 type CacheEntry = {
-  imageBase64: string;
+  imageUrl: string;
   mimeType: string;
 };
 
-// Module-level session cache — survives component remounts within same browser session
+// Module-level session cache — survives component remounts within same browser
+// session. Cached signed URLs expire after an hour; the regenerate button
+// covers that edge.
 const sessionCache = new Map<string, CacheEntry>();
 
 function makeCacheKey(outfit: TryOnPreviewProps["outfit"]): string {
   return `${outfit.top.id}_${outfit.bottom.id}_${outfit.shoe.id}`;
+}
+
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLLS = 60; // 3 minutes — covers the slowest provider (OpenAI, 120s)
+
+type JobResult = CacheEntry;
+
+/**
+ * Creates a try-on job and polls it to completion. Returns null if the caller
+ * cancelled (component unmounted); throws on failure or timeout.
+ */
+async function generateViaJob(
+  outfit: TryOnPreviewProps["outfit"],
+  isCancelled: () => boolean,
+): Promise<JobResult | null> {
+  const res = await fetch("/api/tryon", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      topItemId: outfit.top.id,
+      bottomItemId: outfit.bottom.id,
+      shoeItemId: outfit.shoe.id,
+    }),
+  });
+  const json = await res.json();
+  if (!res.ok || !json.ok || !json.jobId) {
+    throw new Error(json?.reason || json?.error || "generation_failed");
+  }
+
+  for (let attempt = 0; attempt < MAX_POLLS; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    if (isCancelled()) return null;
+
+    const pollRes = await fetch(`/api/tryon?jobId=${encodeURIComponent(json.jobId)}`);
+    const poll = await pollRes.json();
+    if (isCancelled()) return null;
+
+    if (poll.status === "ready" && poll.imageUrl) {
+      return { imageUrl: poll.imageUrl, mimeType: poll.mimeType ?? "image/png" };
+    }
+    if (poll.status === "failed" || pollRes.status === 404) {
+      throw new Error(poll?.reason || "generation_failed");
+    }
+    // pending/running (or a transient poll error) — keep waiting
+  }
+
+  throw new Error("timed_out");
 }
 
 function DownloadIcon() {
@@ -65,16 +114,24 @@ function RefreshIcon() {
 export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
   function TryOnPreview({ outfit, hasTryOnPhoto, displayName, embedded }, ref) {
     const [phase, setPhase] = useState<Phase>("idle");
-    const [imageBase64, setImageBase64] = useState<string | null>(null);
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
     const [imageMimeType, setImageMimeType] = useState<string>("image/png");
     const [fallbackNote, setFallbackNote] = useState<string | null>(null);
-    const failCountRef = useRef(0);
+    const [failCount, setFailCount] = useState(0);
+    const cancelledRef = useRef(false);
+
+    useEffect(() => {
+      cancelledRef.current = false;
+      return () => {
+        cancelledRef.current = true;
+      };
+    }, []);
 
     const generate = useCallback(async () => {
       const cacheKey = makeCacheKey(outfit);
       const cached = sessionCache.get(cacheKey);
       if (cached) {
-        setImageBase64(cached.imageBase64);
+        setImageUrl(cached.imageUrl);
         setImageMimeType(cached.mimeType);
         setPhase("success");
         return;
@@ -83,55 +140,27 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
       setPhase("loading");
       setFallbackNote(null);
 
-      try {
-        const res = await fetch("/api/tryon", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            topItemId: outfit.top.id,
-            bottomItemId: outfit.bottom.id,
-            shoeItemId: outfit.shoe.id,
-          }),
-        });
-        const json = await res.json();
+      const isCancelled = () => cancelledRef.current;
 
-        if (!res.ok || !json.ok) {
-          throw new Error(json?.reason || json?.error || "generation_failed");
+      // One automatic retry; the server reuses an in-flight job for the same
+      // outfit, so this never spawns a duplicate generation.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const result = await generateViaJob(outfit, isCancelled);
+          if (result === null) return; // unmounted mid-poll
+          sessionCache.set(cacheKey, result);
+          setImageUrl(result.imageUrl);
+          setImageMimeType(result.mimeType);
+          setPhase("success");
+          return;
+        } catch {
+          setFailCount((count) => count + 1);
+          if (isCancelled()) return;
         }
-
-        sessionCache.set(cacheKey, { imageBase64: json.imageBase64, mimeType: json.mimeType });
-        setImageBase64(json.imageBase64);
-        setImageMimeType(json.mimeType);
-        setPhase("success");
-      } catch {
-        failCountRef.current += 1;
-        if (failCountRef.current === 1) {
-          // One automatic retry
-          try {
-            const res = await fetch("/api/tryon", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                topItemId: outfit.top.id,
-                bottomItemId: outfit.bottom.id,
-                shoeItemId: outfit.shoe.id,
-              }),
-            });
-            const json = await res.json();
-            if (!res.ok || !json.ok) throw new Error(json?.reason || "generation_failed");
-
-            sessionCache.set(makeCacheKey(outfit), { imageBase64: json.imageBase64, mimeType: json.mimeType });
-            setImageBase64(json.imageBase64);
-            setImageMimeType(json.mimeType);
-            setPhase("success");
-            return;
-          } catch {
-            failCountRef.current += 1;
-          }
-        }
-        setFallbackNote("Couldn't generate your look right now — here's your outfit recommendation.");
-        setPhase("fallback");
       }
+
+      setFallbackNote("Couldn't generate your look right now — here's your outfit recommendation.");
+      setPhase("fallback");
     }, [outfit]);
 
     const regenerate = useCallback(() => {
@@ -141,17 +170,25 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
 
     useImperativeHandle(ref, () => ({ generate: () => void generate() }), [generate]);
 
-    function onDownload() {
-      if (!imageBase64 || !imageMimeType) return;
+    async function onDownload() {
+      if (!imageUrl) return;
       const ext = imageMimeType.split("/")[1] ?? "png";
-      const link = document.createElement("a");
-      link.href = `data:${imageMimeType};base64,${imageBase64}`;
-      link.download = `driply-look.${ext}`;
-      link.click();
+      try {
+        const res = await fetch(imageUrl);
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = `driply-look.${ext}`;
+        link.click();
+        URL.revokeObjectURL(objectUrl);
+      } catch {
+        // Signed URL may have expired; regenerate refreshes it.
+      }
     }
 
     const title = displayName?.trim() ? `${displayName}'s look` : "Your look";
-    const canRetry = phase === "fallback" && failCountRef.current < 3;
+    const canRetry = phase === "fallback" && failCount < 3;
 
     // ── Embedded mode (inside AI chat card) ──
     if (embedded) {
@@ -161,12 +198,12 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
         return <div className="shimmer h-[280px] bg-surface-subtle sm:h-[360px]" />;
       }
 
-      if (phase === "success" && imageBase64) {
+      if (phase === "success" && imageUrl) {
         return (
           <div className="border-t border-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={`data:${imageMimeType};base64,${imageBase64}`}
+              src={imageUrl}
               alt={title}
               className="mx-auto max-h-[480px] w-full object-contain bg-surface-subtle"
             />
@@ -309,12 +346,12 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(
     }
 
     // Success — show generated image
-    if (phase === "success" && imageBase64) {
+    if (phase === "success" && imageUrl) {
       return (
         <section className="app-card overflow-hidden rounded-3xl">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`data:${imageMimeType};base64,${imageBase64}`}
+            src={imageUrl}
             alt={title}
             className="mx-auto max-h-[520px] w-full object-contain bg-surface-subtle"
           />
