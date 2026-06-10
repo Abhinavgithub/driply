@@ -1,23 +1,49 @@
-const store = new Map<string, { count: number; windowStart: number }>();
+import { prisma } from "@/lib/prisma";
 
-// Evict expired entries every 5 minutes to prevent unbounded memory growth.
-// .unref() prevents this timer from keeping short-lived processes (test runners,
-// seed scripts) alive after their own work is done.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store) {
-    if (now - entry.windowStart > 60_000) store.delete(key);
-  }
-}, 5 * 60 * 1000).unref();
+const WINDOW_SECONDS = 60;
+const PRUNE_PROBABILITY = 0.01;
+const PRUNE_OLDER_THAN_MS = 10 * 60 * 1000;
 
-export function checkRateLimit(key: string, maxPerMinute: number): boolean {
-  const now = Date.now();
-  const entry = store.get(key);
-  if (!entry || now - entry.windowStart > 60_000) {
-    store.set(key, { count: 1, windowStart: now });
+/**
+ * Fixed 60s window rate limiter backed by Postgres, so limits hold across
+ * serverless instances and cold starts. The insert-or-increment is a single
+ * atomic statement; concurrent requests cannot double-count or reset a live
+ * window.
+ *
+ * Fails open on database errors: an unavailable limiter should degrade to
+ * "no limit", not take every guarded endpoint down with it.
+ */
+export async function checkRateLimit(key: string, maxPerMinute: number): Promise<boolean> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+      INSERT INTO "RateLimit" ("key", "count", "windowStart")
+      VALUES (${key}, 1, now())
+      ON CONFLICT ("key") DO UPDATE SET
+        "count" = CASE
+          WHEN "RateLimit"."windowStart" <= now() - make_interval(secs => ${WINDOW_SECONDS})
+          THEN 1
+          ELSE "RateLimit"."count" + 1
+        END,
+        "windowStart" = CASE
+          WHEN "RateLimit"."windowStart" <= now() - make_interval(secs => ${WINDOW_SECONDS})
+          THEN now()
+          ELSE "RateLimit"."windowStart"
+        END
+      RETURNING "count"
+    `;
+
+    if (Math.random() < PRUNE_PROBABILITY) {
+      await prisma.rateLimit.deleteMany({
+        where: { windowStart: { lt: new Date(Date.now() - PRUNE_OLDER_THAN_MS) } },
+      });
+    }
+
+    return (rows[0]?.count ?? 1) <= maxPerMinute;
+  } catch (error) {
+    console.warn("[rate-limit] check failed, allowing request", {
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return true;
   }
-  if (entry.count >= maxPerMinute) return false;
-  entry.count++;
-  return true;
 }
