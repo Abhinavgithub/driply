@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
-  if (!checkRateLimit(`analyze:${currentUser.appUser.id}`, 3)) {
+  if (!(await checkRateLimit(`analyze:${currentUser.appUser.id}`, 3))) {
     return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
   }
 

@@ -26,7 +26,7 @@ export function withAuth(
     if (!user) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
-    if (rateLimit && !checkRateLimit(rateLimit.key(user), rateLimit.max)) {
+    if (rateLimit && !(await checkRateLimit(rateLimit.key(user), rateLimit.max))) {
       return NextResponse.json(
         { error: "Too many requests. Try again in a minute." },
         { status: 429 },

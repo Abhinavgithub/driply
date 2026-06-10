@@ -14,6 +14,9 @@ export type GeocodingResult = {
 type CachedWeather = { result: WeatherResult; expiresAt: number };
 const weatherCache = new Map<string, CachedWeather>();
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// Callers treat weather as optional; a hung upstream request must not stall
+// the whole recommendation request into the serverless function timeout.
+const FETCH_TIMEOUT_MS = 5_000;
 
 function evictExpiredWeatherEntries() {
   const now = Date.now();
@@ -37,6 +40,7 @@ export async function fetchWeather(lat: number, lon: number): Promise<WeatherRes
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) throw new Error("Failed to fetch weather");
@@ -70,6 +74,7 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
   const res = await fetch(url.toString(), {
     headers: { accept: "application/json" },
     cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) throw new Error("Failed to search locations");

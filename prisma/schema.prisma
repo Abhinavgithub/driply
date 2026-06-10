@@ -168,3 +168,11 @@ model AppConfig {
   possibleValues String?
   updatedAt      DateTime @updatedAt
 }
+
+/// Fixed-window rate limit counters. Backed by Postgres so limits hold across
+/// serverless instances and cold starts; rows are pruned opportunistically.
+model RateLimit {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
