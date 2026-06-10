@@ -12,9 +12,10 @@ const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  // Supabase Storage signed URLs, Google OAuth avatars, data:/blob: for
-  // upload previews and base64 try-on images.
-  "img-src 'self' https://*.supabase.co https://lh3.googleusercontent.com data: blob:",
+  // Supabase Storage signed URLs, Google OAuth avatars, Unsplash (landing
+  // page outfit examples), data:/blob: for upload previews and base64
+  // try-on images.
+  "img-src 'self' https://*.supabase.co https://lh3.googleusercontent.com https://images.unsplash.com data: blob:",
   `connect-src 'self' https://*.supabase.co${isDev ? " ws:" : ""}`,
   "font-src 'self'",
   "object-src 'none'",
