@@ -13,9 +13,14 @@ import { processTryOnJob } from "@/lib/tryon-job";
  */
 export async function triggerTryOnJobProcessing(jobId: string): Promise<void> {
   const secret = process.env.TRYON_WORKER_SECRET?.trim();
-  const base = process.env.URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+  // URL is one of the few read-only env vars Netlify exposes to functions at
+  // runtime (NETLIFY, CONTEXT, DEPLOY_URL etc. are build-time only — see
+  // docs.netlify.com/functions/environment-variables). It is absent in plain
+  // local dev, so this gate also keeps localhost on the after() path; running
+  // under `netlify dev` sets it and emulates the worker.
+  const base = process.env.URL?.trim();
 
-  if (process.env.NETLIFY && secret && base) {
+  if (secret && base) {
     try {
       const res = await fetch(`${base}/.netlify/functions/tryon-process-background`, {
         method: "POST",
