@@ -79,6 +79,13 @@ enum DnaAssetStatus {
   FAILED
 }
 
+enum TryOnJobStatus {
+  PENDING
+  RUNNING
+  READY
+  FAILED
+}
+
 model User {
   id                   String          @id @db.Uuid
   email                String?         @unique
@@ -95,6 +102,31 @@ model User {
   items                Item[]
   history              OutfitHistory[]
   styleDna             StyleDNA?
+  tryOnJobs            TryOnJob[]
+}
+
+/// Async try-on generation jobs. Generation takes 45–120s, far beyond the
+/// Netlify synchronous function timeout, so POST /api/tryon creates a job,
+/// a background worker processes it, and the client polls for the result.
+model TryOnJob {
+  id             String         @id @default(cuid())
+  userId         String         @db.Uuid
+  topItemId      String
+  bottomItemId   String
+  shoeItemId     String
+  provider       String
+  status         TryOnJobStatus @default(PENDING)
+  errorCode      String?
+  /// Supabase Storage object path of the generated image; signed on read.
+  resultPath     String?
+  resultMimeType String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model StyleDNA {
