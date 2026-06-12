@@ -175,6 +175,9 @@ model Item {
   /// Canonical Supabase Storage object path. API responses replace this with a signed URL.
   photoUrl     String
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  historyAsTop    OutfitHistory[] @relation("OutfitHistoryTop")
+  historyAsBottom OutfitHistory[] @relation("OutfitHistoryBottom")
+  historyAsShoe   OutfitHistory[] @relation("OutfitHistoryShoe")
 
   @@index([userId, createdAt])
   @@index([userId, kind])
@@ -185,12 +188,19 @@ model OutfitHistory {
   userId       String   @db.Uuid
   date         DateTime
   createdAt    DateTime @default(now())
-  topItemId    String
-  bottomItemId String
-  shoeItemId   String
+  /// Nulled when the referenced item is deleted; the history row is kept.
+  topItemId    String?
+  bottomItemId String?
+  shoeItemId   String?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topItem      Item?    @relation("OutfitHistoryTop", fields: [topItemId], references: [id], onDelete: SetNull)
+  bottomItem   Item?    @relation("OutfitHistoryBottom", fields: [bottomItemId], references: [id], onDelete: SetNull)
+  shoeItem     Item?    @relation("OutfitHistoryShoe", fields: [shoeItemId], references: [id], onDelete: SetNull)
 
-  @@index([userId, date])
+  // Prefix (userId, date) also serves the lookups the old @@index([userId, date])
+  // covered. NULLs are distinct in Postgres, so only fully-intact duplicates
+  // are rejected — new rows always have all three ids.
+  @@unique([userId, date, topItemId, bottomItemId, shoeItemId])
 }
 
 model AppConfig {

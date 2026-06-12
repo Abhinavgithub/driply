@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 
 import { getBrowserSupabaseClient } from '@/lib/supabase/browser';
+import { ItemImage } from '@/components/item-image';
 import {
   TryOnPreview,
   type TryOnPreviewHandle,
 } from '@/components/tryon-preview';
+import { ApiError, isHandledFetchError } from '@/lib/fetch-utils';
+import { useApiFetch, type ApiFetch } from '@/lib/hooks/use-api-fetch';
 import { formatEnumLabel } from '@/lib/itemAttributes';
 
 type Item = {
@@ -277,32 +280,30 @@ async function getGeolocationWithRetry(): Promise<Coordinates> {
   throw new Error('Location failed.');
 }
 
-async function fetchRecommendationPage(args: {
-  coords: Coordinates;
-  dateKey: string;
-  offset: number;
-  limit: number;
-}) {
+function fetchRecommendationPage(
+  apiFetch: ApiFetch,
+  args: {
+    coords: Coordinates;
+    dateKey: string;
+    offset: number;
+    limit: number;
+  },
+) {
   const { coords, dateKey, offset, limit } = args;
-  const res = await fetch(
+  return apiFetch<RecommendationOptionsResponse>(
     `/api/recommendations?lat=${coords.lat}&lon=${coords.lon}&date=${encodeURIComponent(dateKey)}&offset=${offset}&limit=${limit}`,
   );
-  // Use .catch so HTML error pages (e.g. Next.js 500) don't throw before the
-  // caller can inspect res.ok and surface the right error message.
-  const json = await res.json().catch(() => ({}));
-  return { res, json };
 }
 
-async function searchManualLocations(query: string) {
-  const res = await fetch(
+async function searchManualLocations(apiFetch: ApiFetch, query: string) {
+  const json = await apiFetch<{ results?: LocationResult[] }>(
     `/api/location-search?q=${encodeURIComponent(query)}`,
   );
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as { error?: string }).error || 'Location search failed.');
-  return ((json as { results?: LocationResult[] }).results ?? []) as LocationResult[];
+  return json.results ?? [];
 }
 
 export default function TodayPage() {
+  const apiFetch = useApiFetch();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -460,10 +461,10 @@ export default function TodayPage() {
     if (!authUserId) return;
     let active = true;
     void Promise.all([
-      fetch('/api/profile').then((r) => r.json()).catch(() => ({})),
-      fetch('/api/style-dna').then((r) => r.json()).catch(() => null),
+      apiFetch<{ displayName?: string | null; hasTryOnPhoto?: boolean }>('/api/profile').catch(() => null),
+      apiFetch<{ exists?: boolean; textStatus?: string; archetypeName?: string | null }>('/api/style-dna').catch(() => null),
     ]).then(([profileJson, dnaJson]) => {
-      if (!active) return;
+      if (!active || !profileJson) return;
       setUserProfile({
         displayName: profileJson.displayName ?? null,
         hasTryOnPhoto: Boolean(profileJson.hasTryOnPhoto),
@@ -471,18 +472,17 @@ export default function TodayPage() {
           dnaJson?.exists && dnaJson.textStatus === 'READY' ? (dnaJson.archetypeName ?? null) : null,
       });
     });
-    void fetch(`/api/outfits?date=${localDateKey}`)
-      .then((r) => r.json())
+    void apiFetch<{ dateKeys?: string[]; history?: WornHistoryItem[] }>(`/api/outfits?date=${localDateKey}`)
       .then((json) => {
         if (!active) return;
-        setWornDateKeys(new Set((json.dateKeys ?? []) as string[]));
-        setWornHistory((json.history ?? []) as WornHistoryItem[]);
+        setWornDateKeys(new Set(json.dateKeys ?? []));
+        setWornHistory(json.history ?? []);
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [authUserId, localDateKey]);
+  }, [authUserId, localDateKey, apiFetch]);
 
   // Score ring animation
   useEffect(() => {
@@ -569,21 +569,26 @@ export default function TodayPage() {
       setCoords(nextCoords);
       setLocationSource(source);
       setActiveLocationLabel(locationLabel ?? null);
-      const { res, json } = await fetchRecommendationPage({
-        coords: nextCoords,
-        dateKey: localDateKey,
-        offset: 0,
-        limit: pageLimit,
-      });
-      if (!res.ok) {
-        if (json?.needs) setNeeds(json.needs);
-        throw new Error(json?.error || 'Recommendation failed.');
+      let data: RecommendationOptionsResponse;
+      try {
+        data = await fetchRecommendationPage(apiFetch, {
+          coords: nextCoords,
+          dateKey: localDateKey,
+          offset: 0,
+          limit: pageLimit,
+        });
+      } catch (error) {
+        // The API reports an empty wardrobe via `needs` on the error body.
+        if (error instanceof ApiError) {
+          const needs = (error.body as { needs?: { top: boolean; bottom: boolean; shoe: boolean } } | null)?.needs;
+          if (needs) setNeeds(needs);
+        }
+        throw error;
       }
-      const data = json as RecommendationOptionsResponse;
       setOptions(data.options ?? []);
       setCursor(data.offset + (data.options?.length ?? 0));
     },
-    [localDateKey],
+    [localDateKey, apiFetch],
   );
 
   const loadInitialRecommendation = useCallback(async () => {
@@ -606,6 +611,7 @@ export default function TodayPage() {
       await loadRecommendationsForCoordinates(nextCoords, 'device');
     } catch (e) {
       pendingGeoRef.current = null; // clear so "Retry device" calls geolocation fresh
+      if (isHandledFetchError(e)) return;
       const message = e instanceof Error ? e.message : String(e);
       setLocationError(message);
       if (storedLocation) {
@@ -618,6 +624,7 @@ export default function TodayPage() {
           setLoading(false);
           return;
         } catch (fallbackError) {
+          if (isHandledFetchError(fallbackError)) return;
           setError(
             fallbackError instanceof Error
               ? fallbackError.message
@@ -643,7 +650,7 @@ export default function TodayPage() {
     if (!current) return;
     setError(null);
     try {
-      const res = await fetch('/api/outfits', {
+      const json = await apiFetch<{ history?: { id: string } }>('/api/outfits', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -653,9 +660,8 @@ export default function TodayPage() {
           shoeItemId: current.shoe.id,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Save failed.');
-      const historyId: string = json.history?.id;
+      const historyId = json.history?.id;
+      if (!historyId) throw new Error('Save failed.');
       setMarked(true);
       setWornDateKeys((prev) => new Set([...prev, localDateKey]));
 
@@ -664,6 +670,7 @@ export default function TodayPage() {
       const timerId = setTimeout(() => setUndoRecord(null), 5000);
       setUndoRecord({ id: historyId, timerId });
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     }
   }
@@ -673,7 +680,7 @@ export default function TodayPage() {
     clearTimeout(undoRecord.timerId);
     setUndoRecord(null);
     try {
-      await fetch('/api/outfits', {
+      await apiFetch('/api/outfits', {
         method: 'DELETE',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ id: undoRecord.id }),
@@ -701,19 +708,18 @@ export default function TodayPage() {
     setLoading(true);
     setError(null);
     try {
-      const { res, json } = await fetchRecommendationPage({
+      const data = await fetchRecommendationPage(apiFetch, {
         coords: c,
         dateKey: localDateKey,
         offset: cursor,
         limit: pageLimit,
       });
-      if (!res.ok) throw new Error(json?.error || 'Load failed.');
-      const data = json as RecommendationOptionsResponse;
       if (!data.options?.length) return;
       setOptions((prev) => [...prev, ...data.options]);
       setCursor(data.offset + data.options.length);
       setSelectedIndex(nextIndex);
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -730,10 +736,11 @@ export default function TodayPage() {
     setSearchLoading(true);
     setSearchError(null);
     try {
-      const results = await searchManualLocations(trimmed);
+      const results = await searchManualLocations(apiFetch, trimmed);
       setSearchResults(results);
       if (!results.length) setSearchError('No results.');
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setSearchError(e instanceof Error ? e.message : String(e));
       setSearchResults([]);
     } finally {
@@ -761,6 +768,7 @@ export default function TodayPage() {
       setLocationError(null);
       setSearchResults([]);
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -1048,8 +1056,7 @@ export default function TodayPage() {
             className='outfit-hero-item outfit-hero-main'
             onClick={() => void onShowAnother()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={current.top.photoUrl} alt={current.top.subtype} />
+            <ItemImage itemId={current.top.id} src={current.top.photoUrl} alt={current.top.subtype} />
             <div className='outfit-item-tag'>
               <div>
                 <div className='outfit-item-tag-category'>Top</div>
@@ -1071,8 +1078,7 @@ export default function TodayPage() {
             className='outfit-hero-item'
             onClick={() => void onShowAnother()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={current.bottom.photoUrl} alt={current.bottom.subtype} />
+            <ItemImage itemId={current.bottom.id} src={current.bottom.photoUrl} alt={current.bottom.subtype} />
             <div className='outfit-item-tag'>
               <div>
                 <div className='outfit-item-tag-category'>Bottom</div>
@@ -1095,8 +1101,7 @@ export default function TodayPage() {
             className='outfit-hero-item'
             onClick={() => void onShowAnother()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={current.shoe.photoUrl} alt={current.shoe.subtype} />
+            <ItemImage itemId={current.shoe.id} src={current.shoe.photoUrl} alt={current.shoe.subtype} />
             <div className='outfit-item-tag'>
               <div>
                 <div className='outfit-item-tag-category'>Shoes</div>

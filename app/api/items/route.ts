@@ -259,9 +259,16 @@ async function resolveUploadMetadata(args: {
   }
 }
 
-export const GET = withAuth(async (user) => {
+export const GET = withAuth(async (user, req) => {
+  // ?ids=a,b,c narrows the result — used to mint fresh signed photo URLs when
+  // a long-lived page's URLs expire.
+  const idsParam = new URL(req.url).searchParams.get("ids");
+  const ids = idsParam
+    ? [...new Set(idsParam.split(",").filter(Boolean))].slice(0, 50)
+    : null;
+
   const items = await prisma.item.findMany({
-    where: { userId: user.appUser.id },
+    where: { userId: user.appUser.id, ...(ids ? { id: { in: ids } } : {}) },
     orderBy: { createdAt: "desc" },
   });
 
@@ -409,17 +416,8 @@ export const DELETE = withAuth(
     return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
-  await prisma.outfitHistory.deleteMany({
-    where: {
-      userId: user.appUser.id,
-      OR: [
-        { topItemId: parsed.data.itemId },
-        { bottomItemId: parsed.data.itemId },
-        { shoeItemId: parsed.data.itemId },
-      ],
-    },
-  });
-
+  // OutfitHistory rows referencing this item are preserved — the FK relations
+  // null out their item ids (onDelete: SetNull), keeping worn days intact.
   await prisma.item.delete({
     where: { id: parsed.data.itemId, userId: user.appUser.id },
   });

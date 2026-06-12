@@ -84,11 +84,12 @@ export const GET = withAuth(
   const temperatureC = Math.round(weather.temperatureC * 2) / 2;
   const precipitationMm = Math.round(weather.precipitationMm * 10) / 10;
 
+  // Item ids are null when the item was deleted after the outfit was worn.
   const wornItemIds = new Set<string>();
   for (const outfit of recent) {
-    wornItemIds.add(outfit.topItemId);
-    wornItemIds.add(outfit.bottomItemId);
-    wornItemIds.add(outfit.shoeItemId);
+    if (outfit.topItemId) wornItemIds.add(outfit.topItemId);
+    if (outfit.bottomItemId) wornItemIds.add(outfit.bottomItemId);
+    if (outfit.shoeItemId) wornItemIds.add(outfit.shoeItemId);
   }
 
   const baseRankedOptions = rankOutfits({

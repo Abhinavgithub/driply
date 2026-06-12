@@ -92,11 +92,12 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
+  // Item ids are null when the item was deleted after the outfit was worn.
   const wornItemIds = new Set<string>();
   for (const outfit of recent) {
-    wornItemIds.add(outfit.topItemId);
-    wornItemIds.add(outfit.bottomItemId);
-    wornItemIds.add(outfit.shoeItemId);
+    if (outfit.topItemId) wornItemIds.add(outfit.topItemId);
+    if (outfit.bottomItemId) wornItemIds.add(outfit.bottomItemId);
+    if (outfit.shoeItemId) wornItemIds.add(outfit.shoeItemId);
   }
 
   const rankedOptions = rankOutfits({

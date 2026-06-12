@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpack flag, not Turbopack
 npm run build      # Production build
 npm run lint       # ESLint
-npx prisma migrate dev   # Run pending migrations
+npx prisma migrate dev   # Run pending migrations (fails against Supabase — hand-author SQL + migrate deploy instead)
 npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`.
+No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs lint, `tsc --noEmit`, and the production build on PRs and pushes to main. Production Netlify deploys run `prisma migrate deploy` before the build (`[context.production]` in `netlify.toml`), so migrations reach production only via merge to main; deploy previews never touch the database.
 
 ## Architecture
 
@@ -31,12 +31,15 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 
 **Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route.
 
+**Client fetch convention:** pages call APIs through `useApiFetch()` (`lib/hooks/use-api-fetch.ts`), which wraps `fetchJson` (`lib/fetch-utils.ts`): throws `ApiError` on non-2xx, aborts in-flight requests on unmount, and redirects to `/sign-in` on 401. Catch blocks bail out early with `isHandledFetchError(e)` before surfacing errors. Item photos render via `<ItemImage>` (`components/item-image.tsx`), which re-fetches a fresh signed URL once on image load failure (signed URLs expire after 1 hour).
+
 **API route conventions:**
 - All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`)
 - POST/PATCH routes validate with Zod schemas; validation failures return 400
 - Item and profile photos are always served as signed URLs (1-hour expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
 - Two recommendation endpoints: `GET /api/recommendation` (singular, single outfit + debug scores for `/today`) vs `GET /api/recommendations` (plural, paginated carousel)
 - Failed item analysis can be retried via `POST /api/items/analyze` with `{ itemId }` in the body (only items with `analysisStatus: PENDING`)
+- `GET /api/items?ids=a,b,c` narrows to specific items (used to mint fresh signed photo URLs)
 - Try-on is async: `POST /api/tryon` creates a `TryOnJob` and returns `{ jobId }`; the client polls `GET /api/tryon?jobId=…` until `ready` (signed result URL) or `failed`
 
 **Key `lib/` modules:**
@@ -62,7 +65,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 **Database (Prisma + Supabase Postgres):**
 - `User` — synced from Supabase Auth on first login; extended with `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`, `aiTryOnPhotoMimeType` (user-controlled, never overwritten by OAuth sync)
 - `Item` — wardrobe item with `kind` (TOP/BOTTOM/SHOE), attribute enums (colorFamily, pattern, styleProfile, formality, warmthLevel), and AI analysis fields (`analysisStatus`, `metadataSource`, etc.). Upload sets `analysisStatus` per path: `READY` (AI classification succeeded, or manual with all attributes), `SKIPPED` (manual with unknown attributes), `PENDING` (AI attempted but failed — retryable via the analyze endpoint). Only `READY` items enter recommendations. Key enums: `AnalysisStatus` (PENDING/READY/FAILED/SKIPPED), `MetadataSource` (MANUAL/AI/MIXED)
-- `OutfitHistory` — records of outfits worn; 7-day lookback used to penalize recently-repeated combinations. Item IDs are plain strings (no FK relation to `Item`)
+- `OutfitHistory` — records of outfits worn; 7-day lookback used to penalize recently-repeated combinations. Item ids are optional FKs to `Item` (`onDelete: SetNull` — deleting an item keeps the history row with a null id), with a unique constraint on `(userId, date, topItemId, bottomItemId, shoeItemId)` for idempotent logging
 - `TryOnJob` — async try-on generation jobs (PENDING/RUNNING/READY/FAILED) polled by the client
 - `StyleDNA` — generated style profile per user
 - `AppConfig` / `RateLimit` — runtime feature flags and shared rate-limit windows (both survive serverless cold starts)
