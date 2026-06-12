@@ -32,7 +32,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 **Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route.
 
 **API route conventions:**
-- All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`). Exception: `app/api/items/analyze/route.ts` hand-rolls the same checks.
+- All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`)
 - POST/PATCH routes validate with Zod schemas; validation failures return 400
 - Item and profile photos are always served as signed URLs (1-hour expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
 - Two recommendation endpoints: `GET /api/recommendation` (singular, single outfit + debug scores for `/today`) vs `GET /api/recommendations` (plural, paginated carousel)
@@ -40,7 +40,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - Try-on is async: `POST /api/tryon` creates a `TryOnJob` and returns `{ jobId }`; the client polls `GET /api/tryon?jobId=…` until `ready` (signed result URL) or `failed`
 
 **Key `lib/` modules:**
-- `lib/auth.ts` — `getCurrentUser()` (checks Supabase session + syncs Prisma user); all API routes call this and return 401 if missing. `syncAuthUser` only syncs OAuth fields (`name`, `avatarUrl`, `email`) — never overwrites `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`.
+- `lib/auth.ts` — `getCurrentUser()` (checks Supabase session, then a read-only `findUnique` of the Prisma user, upserting only if the row is missing); all API routes call this and return 401 if missing. `syncAuthUser` only syncs OAuth fields (`name`, `avatarUrl`, `email`) — never overwrites `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`.
 - `lib/api-guard.ts` — `withAuth` wrapper (auth + optional rate limit)
 - `lib/rate-limit.ts` — fixed-window rate limiter backed by the Postgres `RateLimit` table (atomic insert-or-increment, survives serverless cold starts); fails open on DB errors
 - `lib/appConfig.ts` — runtime config/feature flags from the `AppConfig` table, 60s in-process cache, falls back to `process.env` if the DB is unreachable
@@ -67,7 +67,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `StyleDNA` — generated style profile per user
 - `AppConfig` / `RateLimit` — runtime feature flags and shared rate-limit windows (both survive serverless cold starts)
 
-**Auth:** Supabase SSR PKCE OAuth (Google). Cookie-based sessions. `syncAuthUser()` upserts the user into Prisma on every `getCurrentUser()` call.
+**Auth:** Supabase SSR PKCE OAuth (Google). Cookie-based sessions. OAuth metadata is synced into Prisma at `/auth/callback`; `getCurrentUser()` only reads, falling back to an upsert when the user row doesn't exist yet.
 
 **AI features** (all optional; flags are read from the `AppConfig` table at runtime, falling back to env vars):
 - `ENABLE_AI_CLASSIFICATION` — runs Gemini on uploaded photos to populate item attributes; uploads still succeed if this fails

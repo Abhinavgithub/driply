@@ -57,6 +57,11 @@ export async function getCurrentUser() {
     return null;
   }
 
-  const appUser = await syncAuthUser(user);
+  // Read-only on the hot path: OAuth metadata is synced at /auth/callback.
+  // Upsert only when the row is missing (e.g. password sign-ins that never
+  // pass through the callback).
+  const appUser =
+    (await prisma.user.findUnique({ where: { id: user.id } })) ??
+    (await syncAuthUser(user));
   return { authUser: user, appUser };
 }
