@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev        # Start dev server (webpack, localhost:3000)
+npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpack flag, not Turbopack
 npm run build      # Production build
 npm run lint       # ESLint
 npx prisma migrate dev   # Run pending migrations
@@ -15,7 +15,7 @@ npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured.
+No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`.
 
 ## Architecture
 
@@ -25,15 +25,32 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `/today` — outfit recommendations (weather-aware) + AI try-on preview
 - `/library` — wardrobe item browser
 - `/profile` — display name, profile picture (avatar), and AI try-on photo upload
+- `/onboarding` — 3-step wizard: style quiz → wardrobe upload → try-on photo (all optional/skippable)
 - `/sign-in`, `/sign-up`, `/auth/callback` — auth flow
-- `app/api/` — all API routes (items, recommendations, weather, outfits, location-search, profile, tryon)
+- `app/api/` — all API routes (items, recommendations, weather, outfits, location-search, profile, tryon, style-dna)
+
+**Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route.
+
+**API route conventions:**
+- All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`). Exception: `app/api/items/analyze/route.ts` hand-rolls the same checks.
+- POST/PATCH routes validate with Zod schemas; validation failures return 400
+- Item and profile photos are always served as signed URLs (1-hour expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
+- Two recommendation endpoints: `GET /api/recommendation` (singular, single outfit + debug scores for `/today`) vs `GET /api/recommendations` (plural, paginated carousel)
+- Failed item analysis can be retried via `POST /api/items/analyze` with `{ itemId }` in the body (only items with `analysisStatus: PENDING`)
+- Try-on is async: `POST /api/tryon` creates a `TryOnJob` and returns `{ jobId }`; the client polls `GET /api/tryon?jobId=…` until `ready` (signed result URL) or `failed`
 
 **Key `lib/` modules:**
 - `lib/auth.ts` — `getCurrentUser()` (checks Supabase session + syncs Prisma user); all API routes call this and return 401 if missing. `syncAuthUser` only syncs OAuth fields (`name`, `avatarUrl`, `email`) — never overwrites `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`.
+- `lib/api-guard.ts` — `withAuth` wrapper (auth + optional rate limit)
+- `lib/rate-limit.ts` — fixed-window rate limiter backed by the Postgres `RateLimit` table (atomic insert-or-increment, survives serverless cold starts); fails open on DB errors
+- `lib/appConfig.ts` — runtime config/feature flags from the `AppConfig` table, 60s in-process cache, falls back to `process.env` if the DB is unreachable
+- `lib/style-preferences.ts` — `QUIZ_QUESTIONS` array (5 questions); answers saved as `User.stylePreferences` (JSON) and influence recommendation scoring weights
 - `lib/gemini.ts` — image classification + outfit re-ranking via Gemini text/JSON; gracefully degrades if unavailable
 - `lib/gemini-tryon.ts` — try-on image generation via `gemini-2.5-flash-preview-image-generation`; multimodal request (try-on photo + clothing images + prompt); returns `{ imageBase64, mimeType }` or throws `TryOnApiError`
 - `lib/openai-tryon.ts` — try-on image generation via OpenAI `gpt-image-2` (`/v1/images/edits`); same multimodal pattern as Gemini (user photo + clothing images); uses `openai` npm SDK + `toFile()` helper
 - `lib/tryon-prompt.ts` — prompt builders for try-on providers: `buildTryOnPrompt()` / `buildOpenAITryOnPrompt()` (multimodal, Gemini + OpenAI) and `buildFluxTryOnPrompt()` (text-only)
+- `lib/tryon-job.ts` / `lib/tryon-trigger.ts` — background try-on processing: trigger schedules `processTryOnJob()` via `next/server`'s `after()`; results are stored in Supabase Storage and served as signed URLs
+- `lib/style-dna.ts` / `lib/style-dna-prompt.ts` — Style DNA generation (`generateStyleDnaForUser()`, `getStyleDnaStatus()`); regeneration has a DB-backed 24h cooldown (`User.lastDnaRegenAt`)
 - `lib/recommendation.ts` — deterministic outfit scoring (weather 45%, color 20%, style 15%, formality 10%, pattern 5%, warmth 5%)
 - `lib/aiRecommendation.ts` — optional Gemini re-ranking on top of deterministic scores
 - `lib/prisma.ts` — singleton Prisma client with `@prisma/adapter-pg`
@@ -44,15 +61,18 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 
 **Database (Prisma + Supabase Postgres):**
 - `User` — synced from Supabase Auth on first login; extended with `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`, `aiTryOnPhotoMimeType` (user-controlled, never overwritten by OAuth sync)
-- `Item` — wardrobe item with `kind` (TOP/BOTTOM/SHOE), attribute enums (colorFamily, pattern, styleProfile, formality, warmthLevel), and AI analysis fields (`analysisStatus`, `metadataSource`, etc.)
-- `OutfitHistory` — records of outfits worn; used to penalize recently-repeated combinations
+- `Item` — wardrobe item with `kind` (TOP/BOTTOM/SHOE), attribute enums (colorFamily, pattern, styleProfile, formality, warmthLevel), and AI analysis fields (`analysisStatus`, `metadataSource`, etc.). Upload sets `analysisStatus` per path: `READY` (AI classification succeeded, or manual with all attributes), `SKIPPED` (manual with unknown attributes), `PENDING` (AI attempted but failed — retryable via the analyze endpoint). Only `READY` items enter recommendations. Key enums: `AnalysisStatus` (PENDING/READY/FAILED/SKIPPED), `MetadataSource` (MANUAL/AI/MIXED)
+- `OutfitHistory` — records of outfits worn; 7-day lookback used to penalize recently-repeated combinations. Item IDs are plain strings (no FK relation to `Item`)
+- `TryOnJob` — async try-on generation jobs (PENDING/RUNNING/READY/FAILED) polled by the client
+- `StyleDNA` — generated style profile per user
+- `AppConfig` / `RateLimit` — runtime feature flags and shared rate-limit windows (both survive serverless cold starts)
 
 **Auth:** Supabase SSR PKCE OAuth (Google). Cookie-based sessions. `syncAuthUser()` upserts the user into Prisma on every `getCurrentUser()` call.
 
-**AI features** (all optional, toggled by env vars):
+**AI features** (all optional; flags are read from the `AppConfig` table at runtime, falling back to env vars):
 - `ENABLE_AI_CLASSIFICATION` — runs Gemini on uploaded photos to populate item attributes; uploads still succeed if this fails
 - `ENABLE_AI_RECOMMENDER` — re-ranks deterministic outfit candidates with Gemini before returning results
-- `ENABLE_AI_TRYON` — generates a try-on image using the selected provider (`TRYON_PROVIDER`); Gemini and OpenAI are multimodal (require user's AI try-on photo); FLUX is text-only; silently falls back to normal recommendation display on any failure
+- `ENABLE_AI_TRYON` — generates a try-on image via background job using the selected provider (`TRYON_PROVIDER`); Gemini and OpenAI are multimodal (require user's AI try-on photo); FLUX is text-only; the client falls back to normal recommendation display if the job fails or times out
 
 ## Environment variables
 
