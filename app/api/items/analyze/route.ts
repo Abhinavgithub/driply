@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getCurrentUser } from "@/lib/auth";
+import { withAuth } from "@/lib/api-guard";
 import {
   buildFallbackVisualSummary,
   classifyWardrobeImage,
@@ -11,21 +11,12 @@ import {
 import { downloadWardrobePhoto } from "@/lib/item-media";
 import { getDefaultSubtypeForKind, isValidSubtypeForKind, type ItemAttributeValues } from "@/lib/itemAttributes";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit } from "@/lib/rate-limit";
 
 const BodySchema = z.object({
   itemId: z.string().min(1),
 });
 
-export async function POST(req: NextRequest) {
-  const currentUser = await getCurrentUser();
-  if (!currentUser) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-  if (!(await checkRateLimit(`analyze:${currentUser.appUser.id}`, 3))) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
-  }
-
+export const POST = withAuth(async (currentUser, req) => {
   const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
@@ -102,4 +93,4 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: false, reason: code });
   }
-}
+}, { key: (user) => `analyze:${user.appUser.id}`, max: 3 });
