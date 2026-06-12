@@ -10,12 +10,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpack flag, not Turbopack
 npm run build      # Production build
 npm run lint       # ESLint
-npx prisma migrate dev   # Run pending migrations
+npx prisma migrate dev   # Run pending migrations (fails against Supabase — hand-author SQL + migrate deploy instead)
 npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs lint, `tsc --noEmit`, and the production build on PRs and pushes to main.
+No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs lint, `tsc --noEmit`, and the production build on PRs and pushes to main. Production Netlify deploys run `prisma migrate deploy` before the build (`[context.production]` in `netlify.toml`), so migrations reach production only via merge to main; deploy previews never touch the database.
 
 ## Architecture
 
