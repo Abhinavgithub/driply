@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { StyleDnaCard } from "@/components/style-dna-card";
-import { fetchJson } from "@/lib/fetch-utils";
+import { ApiError, isHandledFetchError } from "@/lib/fetch-utils";
+import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { validateImageFile } from "@/lib/file-utils";
 import {
   QUIZ_QUESTIONS,
@@ -43,6 +44,7 @@ async function checkLandscape(file: File): Promise<boolean> {
 }
 
 export default function ProfilePage() {
+  const apiFetch = useApiFetch();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,8 +93,8 @@ export default function ProfilePage() {
     void (async () => {
       try {
         const [profileData, dnaData] = await Promise.all([
-          fetchJson<ProfileData & { id?: string }>("/api/profile"),
-          fetchJson<DnaData>("/api/style-dna").catch(() => null),
+          apiFetch<ProfileData & { id?: string }>("/api/profile"),
+          apiFetch<DnaData>("/api/style-dna").catch(() => null),
         ]);
         setProfile(profileData);
         setDisplayName(profileData.displayName ?? "");
@@ -100,24 +102,26 @@ export default function ProfilePage() {
         if (dnaData) setDna(dnaData);
         if (profileData.id) dnaUserId.current = profileData.id;
       } catch (e) {
+        if (isHandledFetchError(e)) return;
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [apiFetch]);
 
   // Poll DNA status while generating
   const dnaStatus = dna?.textStatus;
+  const hasDna = dna !== null;
   useEffect(() => {
     if (!dnaGenerating && dnaStatus !== "GENERATING" && dnaStatus !== "PENDING") return;
-    if (!dnaGenerating && !dna) return;
+    if (!dnaGenerating && !hasDna) return;
     const MAX_POLLS = 15; // 30s
     let attempts = 0;
     const interval = setInterval(async () => {
       attempts++;
       try {
-        const data = await fetchJson<DnaData>("/api/style-dna");
+        const data = await apiFetch<DnaData>("/api/style-dna");
         setDna(data);
         if (data.textStatus === "READY") {
           setDnaGenerating(false);
@@ -127,19 +131,20 @@ export default function ProfilePage() {
           setDnaError(true);
           clearInterval(interval);
         }
-      } catch {
-        // Non-fatal
+      } catch (e) {
+        // Session expired or page unmounted — stop polling. Other errors are
+        // transient; keep polling until MAX_POLLS.
+        if (isHandledFetchError(e)) clearInterval(interval);
       }
     }, 2000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dnaGenerating, dnaStatus]);
+  }, [dnaGenerating, dnaStatus, hasDna, apiFetch]);
 
   async function triggerDnaGeneration() {
     setDnaGenerating(true);
     setDnaError(false);
     try {
-      await fetch("/api/style-dna", { method: "POST" });
+      await apiFetch("/api/style-dna", { method: "POST" });
     } catch {
       setDnaGenerating(false);
     }
@@ -150,13 +155,12 @@ export default function ProfilePage() {
     setDnaError(false);
     setRegenRetryAfter(null);
     try {
-      const res = await fetch("/api/style-dna/regenerate", { method: "POST" });
-      if (!res.ok) {
-        const json = await res.json() as { retryAfter?: number };
-        if (json.retryAfter) setRegenRetryAfter(json.retryAfter);
-        setDnaGenerating(false);
+      await apiFetch("/api/style-dna/regenerate", { method: "POST" });
+    } catch (e) {
+      if (e instanceof ApiError) {
+        const retryAfter = (e.body as { retryAfter?: number } | null)?.retryAfter;
+        if (retryAfter) setRegenRetryAfter(retryAfter);
       }
-    } catch {
       setDnaGenerating(false);
     }
   }
@@ -222,9 +226,7 @@ export default function ProfilePage() {
       if (avatarFile) formData.set("avatar", avatarFile);
       if (tryOnFile) formData.set("aiTryOnPhoto", tryOnFile);
 
-      const res = await fetch("/api/profile", { method: "PATCH", body: formData });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Save failed.");
+      const json = await apiFetch<ProfileData>("/api/profile", { method: "PATCH", body: formData });
 
       setProfile((prev) => ({
         ...prev!,
@@ -238,6 +240,7 @@ export default function ProfilePage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
@@ -249,9 +252,7 @@ export default function ProfilePage() {
     try {
       const formData = new FormData();
       formData.set("stylePreferences", JSON.stringify(prefs));
-      const res = await fetch("/api/profile", { method: "PATCH", body: formData });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Save failed.");
+      await apiFetch("/api/profile", { method: "PATCH", body: formData });
       // Update saved state so isDirty becomes false
       setProfile((prev) => ({ ...prev!, stylePreferences: parseStylePreferences(prefs) }));
       setPrefsSuccess(true);

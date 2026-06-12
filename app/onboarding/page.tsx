@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { StyleDnaLoading } from "@/components/style-dna-loading";
+import { isHandledFetchError } from "@/lib/fetch-utils";
+import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { validateImageFile } from "@/lib/file-utils";
 import { QUIZ_QUESTIONS, type StylePreferences } from "@/lib/style-preferences";
 
@@ -66,6 +68,7 @@ function CloseIcon() {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const apiFetch = useApiFetch();
   const [step, setStep] = useState<WizardStep>(0);
   const [quizStep, setQuizStep] = useState(0);
   const [quizAnswers, setQuizAnswers] = useState<Partial<StylePreferences>>({});
@@ -100,28 +103,20 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     void (async () => {
-      try {
-        const [itemsRes, profileRes] = await Promise.all([
-          fetch("/api/items"),
-          fetch("/api/profile"),
-        ]);
-        if (itemsRes.ok) {
-          const { items = [] } = (await itemsRes.json()) as { items: { kind: ItemKind }[] };
-          const next: ItemCounts = { TOP: 0, BOTTOM: 0, SHOE: 0 };
-          for (const item of items) {
-            if (item.kind in next) next[item.kind]++;
-          }
-          setCounts(next);
+      const [itemsJson, profileJson] = await Promise.all([
+        apiFetch<{ items?: { kind: ItemKind }[] }>("/api/items").catch(() => null),
+        apiFetch<{ hasTryOnPhoto?: boolean }>("/api/profile").catch(() => null),
+      ]);
+      if (itemsJson) {
+        const next: ItemCounts = { TOP: 0, BOTTOM: 0, SHOE: 0 };
+        for (const item of itemsJson.items ?? []) {
+          if (item.kind in next) next[item.kind]++;
         }
-        if (profileRes.ok) {
-          const profile = await profileRes.json();
-          if (Boolean(profile.hasTryOnPhoto)) setTryOnSaved(true);
-        }
-      } catch {
-        // Non-fatal
+        setCounts(next);
       }
+      if (profileJson?.hasTryOnPhoto) setTryOnSaved(true);
     })();
-  }, []);
+  }, [apiFetch]);
 
   // Revoke all blob URLs on unmount — reads from refs to get current URLs, not stale closure values
   useEffect(() => {
@@ -135,7 +130,7 @@ export default function OnboardingPage() {
     try {
       const formData = new FormData();
       formData.set("stylePreferences", JSON.stringify(answers));
-      await fetch("/api/profile", { method: "PATCH", body: formData });
+      await apiFetch("/api/profile", { method: "PATCH", body: formData });
     } catch {
       // Non-fatal — quiz save failure should not block onboarding
     }
@@ -151,7 +146,7 @@ export default function OnboardingPage() {
     } else {
       // All questions answered — save, trigger DNA generation, show loading screen
       await saveQuizAnswers(updatedAnswers as StylePreferences);
-      void fetch("/api/style-dna", { method: "POST" }).catch(() => {});
+      void apiFetch("/api/style-dna", { method: "POST" }).catch(() => {});
       setShowDnaLoading(true);
     }
   }
@@ -176,11 +171,10 @@ export default function OnboardingPage() {
       const formData = new FormData();
       formData.append("photo", file);
       formData.set("kind", kind);
-      const res = await fetch("/api/items", { method: "POST", body: formData });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Upload failed.");
+      await apiFetch("/api/items", { method: "POST", body: formData });
       setCounts((prev) => ({ ...prev, [kind]: prev[kind] + 1 }));
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setUploadErrors((prev) => ({
         ...prev,
         [kind]: e instanceof Error ? e.message : "Upload failed. Please try again.",
@@ -222,12 +216,11 @@ export default function OnboardingPage() {
     try {
       const formData = new FormData();
       formData.set("aiTryOnPhoto", tryOnFile);
-      const res = await fetch("/api/profile", { method: "PATCH", body: formData });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Upload failed.");
+      await apiFetch("/api/profile", { method: "PATCH", body: formData });
       setTryOnSaved(true);
       setTryOnFile(null);
     } catch (e) {
+      if (isHandledFetchError(e)) return;
       setTryOnError(e instanceof Error ? e.message : "Upload failed. Please try again.");
     } finally {
       setTryOnUploading(false);

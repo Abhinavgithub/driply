@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -37,8 +38,15 @@ export const GET = withAuth(async (currentUser, req) => {
 
   const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
 
-  // Fetch item photo paths for the history detail bottom sheet
-  const allItemIds = [...new Set(records.flatMap((r) => [r.topItemId, r.bottomItemId, r.shoeItemId]))];
+  // Fetch item photo paths for the history detail bottom sheet. Ids are null
+  // for items deleted since the outfit was worn.
+  const allItemIds = [
+    ...new Set(
+      records
+        .flatMap((r) => [r.topItemId, r.bottomItemId, r.shoeItemId])
+        .filter((id): id is string => id !== null),
+    ),
+  ];
   const items = allItemIds.length
     ? await prisma.item.findMany({
         where: { id: { in: allItemIds }, userId: currentUser.appUser.id },
@@ -51,9 +59,9 @@ export const GET = withAuth(async (currentUser, req) => {
   const history = records.map((r) => ({
     id: r.id,
     dateKey: r.date.toISOString().slice(0, 10),
-    topPhotoUrl: photoById.get(r.topItemId) ?? null,
-    bottomPhotoUrl: photoById.get(r.bottomItemId) ?? null,
-    shoePhotoUrl: photoById.get(r.shoeItemId) ?? null,
+    topPhotoUrl: (r.topItemId && photoById.get(r.topItemId)) || null,
+    bottomPhotoUrl: (r.bottomItemId && photoById.get(r.bottomItemId)) || null,
+    shoePhotoUrl: (r.shoeItemId && photoById.get(r.shoeItemId)) || null,
   }));
 
   return NextResponse.json({ dateKeys, history });
@@ -83,31 +91,27 @@ export const POST = withAuth(
     return NextResponse.json({ error: "Invalid outfit items." }, { status: 400 });
   }
 
-  const existing = await prisma.outfitHistory.findFirst({
-    where: {
-      userId: currentUser.appUser.id,
-      date: dateKeyToUtcStart(dateKey),
-      topItemId,
-      bottomItemId,
-      shoeItemId,
-    },
-  });
+  const outfitKey = {
+    userId: currentUser.appUser.id,
+    date: dateKeyToUtcStart(dateKey),
+    topItemId,
+    bottomItemId,
+    shoeItemId,
+  };
 
-  if (existing) {
-    return NextResponse.json({ ok: true, history: existing });
+  try {
+    const history = await prisma.outfitHistory.create({ data: outfitKey });
+    return NextResponse.json({ ok: true, history });
+  } catch (err) {
+    // Unique violation: an identical outfit was logged concurrently — idempotent.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existing = await prisma.outfitHistory.findFirst({ where: outfitKey });
+      if (existing) {
+        return NextResponse.json({ ok: true, history: existing });
+      }
+    }
+    throw err;
   }
-
-  const history = await prisma.outfitHistory.create({
-    data: {
-      userId: currentUser.appUser.id,
-      date: dateKeyToUtcStart(dateKey),
-      topItemId,
-      bottomItemId,
-      shoeItemId,
-    },
-  });
-
-  return NextResponse.json({ ok: true, history });
   },
   { key: (u) => `outfits:post:${u.appUser.id}`, max: 30 },
 );

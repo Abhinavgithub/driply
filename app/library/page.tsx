@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
-import { fetchJson } from "@/lib/fetch-utils";
+import { ItemImage } from "@/components/item-image";
+import { isHandledFetchError } from "@/lib/fetch-utils";
+import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 
 import {
   colorFamilies,
@@ -72,6 +74,7 @@ function getItemStatus(item: Item) {
 }
 
 export default function LibraryPage() {
+  const apiFetch = useApiFetch();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +105,13 @@ export default function LibraryPage() {
   });
 
   useEffect(() => {
-    void fetchJson<{ items: Item[] }>("/api/items")
+    void apiFetch<{ items: Item[] }>("/api/items")
       .then((data) => setItems(data.items ?? []))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-  }, []);
+      .catch((e: unknown) => {
+        if (isHandledFetchError(e)) return;
+        setError(e instanceof Error ? e.message : String(e));
+      });
+  }, [apiFetch]);
 
   const grouped = useMemo(() => {
     return items.reduce(
@@ -160,7 +166,7 @@ export default function LibraryPage() {
   }
 
   async function refreshItems() {
-    const data = await fetchJson<{ items: Item[] }>("/api/items");
+    const data = await apiFetch<{ items: Item[] }>("/api/items");
     setItems(data.items ?? []);
   }
 
@@ -185,12 +191,10 @@ export default function LibraryPage() {
         formData.set(key, value);
       }
 
-      const res = await fetch("/api/items", {
+      await apiFetch("/api/items", {
         method: "POST",
         body: formData,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Upload failed");
 
       await refreshItems();
       setFiles([]);
@@ -199,6 +203,7 @@ export default function LibraryPage() {
       setKind("TOP");
       setSubtype(getDefaultSubtypeForKind("TOP"));
     } catch (err) {
+      if (isHandledFetchError(err)) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -210,16 +215,15 @@ export default function LibraryPage() {
     setError(null);
     setDeletingId(itemId);
     try {
-      const res = await fetch("/api/items", {
+      await apiFetch("/api/items", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ itemId }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Delete failed");
 
       setItems((prev) => prev.filter((i) => i.id !== itemId));
     } catch (err) {
+      if (isHandledFetchError(err)) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeletingId(null);
@@ -230,17 +234,16 @@ export default function LibraryPage() {
     setError(null);
     setAnalyzingId(itemId);
     try {
-      const res = await fetch("/api/items/analyze", {
+      const json = await apiFetch<{ ok: boolean; item?: Item }>("/api/items/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ itemId }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Re-analysis failed");
       if (json.ok && json.item) {
-        setItems((prev) => prev.map((i) => (i.id === itemId ? json.item : i)));
+        setItems((prev) => prev.map((i) => (i.id === itemId ? json.item! : i)));
       }
     } catch (err) {
+      if (isHandledFetchError(err)) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setAnalyzingId(null);
@@ -264,17 +267,16 @@ export default function LibraryPage() {
     setError(null);
     setSavingId(itemId);
     try {
-      const res = await fetch("/api/items", {
+      const json = await apiFetch<{ item: Item }>("/api/items", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ itemId, ...editForm }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Update failed");
 
       setItems((prev) => prev.map((item) => (item.id === itemId ? json.item : item)));
       setEditingId(null);
     } catch (err) {
+      if (isHandledFetchError(err)) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingId(null);
@@ -475,8 +477,8 @@ export default function LibraryPage() {
 
                 return (
                   <article key={it.id} className="app-card overflow-hidden rounded-3xl">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <ItemImage
+                      itemId={it.id}
                       src={it.photoUrl}
                       alt={`${it.kind} ${it.subtype}`}
                       className="h-48 w-full object-cover sm:h-56 md:h-64"
