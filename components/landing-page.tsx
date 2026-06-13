@@ -3,6 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+/**
+ * Pointer-driven flourishes (magnetic buttons, tilt, spotlights, parallax) are
+ * skipped on touch devices and when the user prefers reduced motion — they're
+ * decorative, and on touch they fire on tap with no hover to reset them.
+ */
+function prefersInteractiveMotion() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(hover: hover)").matches &&
+    !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 type OutfitItem = { label: string; name: string; img: string };
 type Outfit = {
   label: string;
@@ -138,7 +151,7 @@ export function LandingPage() {
   // Cursor spotlight — RAF loop starts only on first pointer move, skipped on touch devices
   useEffect(() => {
     const el = spotlightRef.current;
-    if (!el || window.matchMedia("(hover: none)").matches) return;
+    if (!el || !prefersInteractiveMotion()) return;
     let spotX = 0, spotY = 0, targetX = 0, targetY = 0;
     let rafId: number;
     let running = false;
@@ -177,7 +190,7 @@ export function LandingPage() {
   // Magnetic buttons
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !prefersInteractiveMotion()) return;
     type H = { el: HTMLElement; onMove: (e: PointerEvent) => void; onLeave: () => void };
     const handlers: H[] = Array.from(
       container.querySelectorAll<HTMLElement>(".lp-btn-primary, .lp-nav-cta")
@@ -200,7 +213,7 @@ export function LandingPage() {
   // 3D card tilt
   useEffect(() => {
     const card = cardRef.current;
-    if (!card) return;
+    if (!card || !prefersInteractiveMotion()) return;
     const onMove = (e: PointerEvent) => {
       const r = card.getBoundingClientRect();
       const x = (e.clientX - r.left) / r.width;
@@ -218,7 +231,7 @@ export function LandingPage() {
   // Feature card mouse-tracking spotlight
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !prefersInteractiveMotion()) return;
     const handlers = Array.from(container.querySelectorAll<HTMLElement>(".lp-feature-card")).map((fc) => {
       const fn = (e: PointerEvent) => {
         const r = fc.getBoundingClientRect();
@@ -234,7 +247,7 @@ export function LandingPage() {
   // Parallax floating badges
   useEffect(() => {
     const b1 = badge1Ref.current, b2 = badge2Ref.current;
-    if (!b1 || !b2) return;
+    if (!b1 || !b2 || !prefersInteractiveMotion()) return;
     const onScroll = () => {
       const y = window.scrollY;
       b1.style.translate = `0 ${y * -0.08}px`;

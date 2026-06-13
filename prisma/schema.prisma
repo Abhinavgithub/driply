@@ -181,6 +181,8 @@ model Item {
 
   @@index([userId, createdAt])
   @@index([userId, kind])
+  // Recommendation queries filter on all three; covers them as wardrobes grow.
+  @@index([userId, kind, analysisStatus])
 }
 
 model OutfitHistory {

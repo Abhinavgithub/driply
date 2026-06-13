@@ -1,6 +1,7 @@
 import sharp from "sharp";
 
 import { getConfig, isEnabledFlag } from "@/lib/appConfig";
+import { getGeminiApiKey } from "@/lib/env";
 
 const DEFAULT_TRYON_MODEL = "gemini-2.5-flash-image";
 const TRYON_TIMEOUT_MS = 45000;
@@ -42,7 +43,7 @@ export class TryOnApiError extends Error {
 }
 
 export async function isAiTryOnEnabled(): Promise<boolean> {
-  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.GEMINI_API_KEY?.trim());
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(getGeminiApiKey());
 }
 
 export async function getTryOnModel(): Promise<string> {
@@ -75,7 +76,7 @@ export async function generateTryOnImage(args: {
   clothingImages: Array<{ bytes: Buffer }>;
   prompt: string;
 }): Promise<TryOnResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new TryOnApiError("Missing Gemini API key.", "MISSING_API_KEY");
   }

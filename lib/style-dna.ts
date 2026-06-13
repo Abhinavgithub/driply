@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { parseStylePreferences } from "@/lib/style-preferences";
+import { getGeminiApiKey } from "@/lib/env";
 import {
   buildRuleBasedDna,
   buildStyleDnaTextPrompt,
@@ -63,7 +64,7 @@ async function computeWardrobeSummary(userId: string): Promise<WardrobeSummary |
 }
 
 async function generateDnaTextWithGemini(prompt: string): Promise<StyleDnaText> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = getGeminiApiKey();
   if (!apiKey) throw new Error("Missing Gemini API key");
 
   const response = await fetch(

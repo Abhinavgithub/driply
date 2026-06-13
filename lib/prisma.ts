@@ -1,15 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+import { getDatabaseUrl } from "@/lib/env";
+
 // Prevent creating a new PrismaClient on every hot-reload in dev.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("Missing DATABASE_URL for Prisma.");
-}
-
-const adapter = new PrismaPg({ connectionString: databaseUrl });
+const adapter = new PrismaPg({ connectionString: getDatabaseUrl() });
 
 export const prisma =
   globalForPrisma.prisma ??

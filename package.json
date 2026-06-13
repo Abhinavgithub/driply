@@ -7,7 +7,13 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
     "postinstall": "prisma generate"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs,json,css}": "prettier --write"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.15",
@@ -30,6 +36,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "prettier": "3.8.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

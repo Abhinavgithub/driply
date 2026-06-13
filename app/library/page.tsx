@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ItemImage } from "@/components/item-image";
 import { isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
+import type { WardrobeItem } from "@/lib/types/wardrobe";
 
 import {
   colorFamilies,
@@ -22,17 +23,7 @@ import {
   type ItemAttributeValues,
 } from "@/lib/itemAttributes";
 
-type Item = {
-  id: string;
-  createdAt: string;
-  kind: "TOP" | "BOTTOM" | "SHOE";
-  subtype: string;
-  photoUrl: string;
-  analysisStatus: "PENDING" | "READY" | "FAILED" | "SKIPPED";
-  metadataSource: "MANUAL" | "AI" | "MIXED";
-  visualSummary: string | null;
-  analysisConfidence: number | null;
-} & ItemAttributeValues;
+type Item = WardrobeItem;
 
 function kindLabel(kind: Item["kind"]) {
   switch (kind) {

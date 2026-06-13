@@ -6,19 +6,14 @@ import { StyleDnaCard } from "@/components/style-dna-card";
 import { ApiError, isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { validateImageFile } from "@/lib/file-utils";
+import type { ProfileResponse } from "@/lib/types/wardrobe";
 import {
   QUIZ_QUESTIONS,
   parseStylePreferences,
   type StylePreferences,
 } from "@/lib/style-preferences";
 
-type ProfileData = {
-  displayName: string | null;
-  avatarUrl: string | null;
-  aiTryOnPhotoUrl: string | null;
-  hasTryOnPhoto: boolean;
-  stylePreferences: StylePreferences | null;
-};
+type ProfileData = Omit<ProfileResponse, "id">;
 
 function AvatarPlaceholder({ letter }: { letter?: string }) {
   return (

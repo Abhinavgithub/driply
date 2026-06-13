@@ -3,6 +3,7 @@ import type { ColorFamily, Formality, Pattern, StyleProfile, WarmthLevel } from 
 import { z } from "zod";
 
 import { getConfig } from "@/lib/appConfig";
+import { getGeminiApiKey } from "@/lib/env";
 
 import {
   colorFamilies,
@@ -122,10 +123,6 @@ class GeminiApiError extends Error {
 function isEnabledFlag(value: string | undefined) {
   if (!value) return false;
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
-function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY?.trim() || "";
 }
 
 export async function isAiClassificationEnabled() {

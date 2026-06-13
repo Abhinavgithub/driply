@@ -1,6 +1,7 @@
 import { InferenceClient } from "@huggingface/inference";
 
 import { getConfig, isEnabledFlag } from "@/lib/appConfig";
+import { getHfToken } from "@/lib/env";
 
 import { TryOnApiError } from "@/lib/gemini-tryon";
 import type { TryOnResult } from "@/lib/gemini-tryon";
@@ -21,11 +22,11 @@ export async function getTryOnProvider(): Promise<TryOnProvider> {
 }
 
 export async function isFluxTryOnEnabled(): Promise<boolean> {
-  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.HF_TOKEN?.trim());
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(getHfToken());
 }
 
 export async function generateFluxTryOnImage(args: { prompt: string }): Promise<TryOnResult> {
-  const token = process.env.HF_TOKEN?.trim();
+  const token = getHfToken();
   if (!token) {
     throw new TryOnApiError("Missing HuggingFace token.", "MISSING_API_KEY");
   }

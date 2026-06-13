@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 
+import { useApiFetch } from "@/lib/hooks/use-api-fetch";
+import { useAuthUser } from "@/lib/hooks/use-auth-user";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+import type { ProfileResponse } from "@/lib/types/wardrobe";
 
 function pageMeta(pathname: string) {
   if (pathname === "/" || pathname === "/sign-in" || pathname === "/sign-up") {
@@ -50,54 +52,31 @@ type AppProfile = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const apiFetch = useApiFetch();
   const meta = useMemo(() => pageMeta(pathname), [pathname]);
-  const [user, setUser] = useState<User | null>(null);
-  const [appProfile, setAppProfile] = useState<AppProfile | null>(null);
+  const { user } = useAuthUser();
+  const [fetchedProfile, setFetchedProfile] = useState<AppProfile | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const supabase = getBrowserSupabaseClient();
-    let active = true;
-
-    void supabase.auth.getUser().then(({ data }) => {
-      if (active) {
-        setUser(data.user ?? null);
-      }
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (active) {
-        setUser(session?.user ?? null);
-        if (!session?.user) setAppProfile(null);
-      }
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+  // Derived so a sign-out drops the profile immediately without an extra
+  // state reset; the next sign-in refetches and overwrites.
+  const appProfile = user ? fetchedProfile : null;
 
   useEffect(() => {
     if (!user) return;
     let active = true;
-    void fetch("/api/profile")
-      .then((res) => res.json())
+    void apiFetch<ProfileResponse>("/api/profile")
       .then((json) => {
         if (!active) return;
-        setAppProfile({
+        setFetchedProfile({
           avatarUrl: json.avatarUrl ?? null,
           displayName: json.displayName ?? null,
         });
       })
       .catch(() => {});
     return () => { active = false; };
-  }, [user]);
+  }, [user, apiFetch]);
 
   useEffect(() => {
     if (!isProfileMenuOpen) return;
@@ -126,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   async function onSignOut() {
     const supabase = getBrowserSupabaseClient();
     await supabase.auth.signOut();
-    setUser(null);
+    // useAuthUser's onAuthStateChange subscription clears `user`.
     setIsProfileMenuOpen(false);
     router.push("/");
     router.refresh();
