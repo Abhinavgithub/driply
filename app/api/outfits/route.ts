@@ -22,7 +22,9 @@ export const GET = withAuth(async (currentUser, req) => {
   // Accept the client's local date so the 7-day window is anchored to the
   // user's local day, not UTC (avoids off-by-one near UTC midnight).
   const localDate = new URL(req.url).searchParams.get("date");
-  const anchorKey = localDate?.match(/^\d{4}-\d{2}-\d{2}$/) ? localDate : new Date().toISOString().slice(0, 10);
+  const anchorKey = localDate?.match(/^\d{4}-\d{2}-\d{2}$/)
+    ? localDate
+    : new Date().toISOString().slice(0, 10);
   const anchor = dateKeyToUtcStart(anchorKey);
   const sevenDaysAgo = new Date(anchor);
   sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
@@ -69,49 +71,49 @@ export const GET = withAuth(async (currentUser, req) => {
 
 export const POST = withAuth(
   async (currentUser, req) => {
-  const json = await req.json().catch(() => null);
-  const parsed = BodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid payload. Expected dateKey and item ids." },
-      { status: 400 },
-    );
-  }
-
-  const { dateKey, topItemId, bottomItemId, shoeItemId } = parsed.data;
-  const ownedItems = await prisma.item.findMany({
-    where: {
-      userId: currentUser.appUser.id,
-      id: { in: [topItemId, bottomItemId, shoeItemId] },
-    },
-    select: { id: true },
-  });
-
-  if (ownedItems.length !== 3) {
-    return NextResponse.json({ error: "Invalid outfit items." }, { status: 400 });
-  }
-
-  const outfitKey = {
-    userId: currentUser.appUser.id,
-    date: dateKeyToUtcStart(dateKey),
-    topItemId,
-    bottomItemId,
-    shoeItemId,
-  };
-
-  try {
-    const history = await prisma.outfitHistory.create({ data: outfitKey });
-    return NextResponse.json({ ok: true, history });
-  } catch (err) {
-    // Unique violation: an identical outfit was logged concurrently — idempotent.
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const existing = await prisma.outfitHistory.findFirst({ where: outfitKey });
-      if (existing) {
-        return NextResponse.json({ ok: true, history: existing });
-      }
+    const json = await req.json().catch(() => null);
+    const parsed = BodySchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid payload. Expected dateKey and item ids." },
+        { status: 400 },
+      );
     }
-    throw err;
-  }
+
+    const { dateKey, topItemId, bottomItemId, shoeItemId } = parsed.data;
+    const ownedItems = await prisma.item.findMany({
+      where: {
+        userId: currentUser.appUser.id,
+        id: { in: [topItemId, bottomItemId, shoeItemId] },
+      },
+      select: { id: true },
+    });
+
+    if (ownedItems.length !== 3) {
+      return NextResponse.json({ error: "Invalid outfit items." }, { status: 400 });
+    }
+
+    const outfitKey = {
+      userId: currentUser.appUser.id,
+      date: dateKeyToUtcStart(dateKey),
+      topItemId,
+      bottomItemId,
+      shoeItemId,
+    };
+
+    try {
+      const history = await prisma.outfitHistory.create({ data: outfitKey });
+      return NextResponse.json({ ok: true, history });
+    } catch (err) {
+      // Unique violation: an identical outfit was logged concurrently — idempotent.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const existing = await prisma.outfitHistory.findFirst({ where: outfitKey });
+        if (existing) {
+          return NextResponse.json({ ok: true, history: existing });
+        }
+      }
+      throw err;
+    }
   },
   { key: (u) => `outfits:post:${u.appUser.id}`, max: 30 },
 );

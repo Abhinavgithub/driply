@@ -39,34 +39,37 @@ export const POST = withAuth(async (currentUser) => {
   // Atomic check-then-upsert: serializable isolation prevents two concurrent
   // requests from both passing the in-progress guard before either writes.
   try {
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.styleDNA.findUnique({
-        where: { userId },
-        select: { textStatus: true },
-      });
-      if (existing?.textStatus === "PENDING" || existing?.textStatus === "GENERATING") {
-        throw new DnaInProgressError();
-      }
-      await tx.styleDNA.upsert({
-        where: { userId },
-        create: {
-          userId,
-          archetypeName: "",
-          description: "",
-          traits: [],
-          colorPalette: [],
-          imagePromptHints: [],
-          textStatus: "PENDING",
-          moodboardStatus: "PENDING",
-          generationTrigger: "onboarding",
-        },
-        update: {
-          textStatus: "PENDING",
-          moodboardStatus: "PENDING",
-          generationTrigger: "onboarding",
-        },
-      });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.styleDNA.findUnique({
+          where: { userId },
+          select: { textStatus: true },
+        });
+        if (existing?.textStatus === "PENDING" || existing?.textStatus === "GENERATING") {
+          throw new DnaInProgressError();
+        }
+        await tx.styleDNA.upsert({
+          where: { userId },
+          create: {
+            userId,
+            archetypeName: "",
+            description: "",
+            traits: [],
+            colorPalette: [],
+            imagePromptHints: [],
+            textStatus: "PENDING",
+            moodboardStatus: "PENDING",
+            generationTrigger: "onboarding",
+          },
+          update: {
+            textStatus: "PENDING",
+            moodboardStatus: "PENDING",
+            generationTrigger: "onboarding",
+          },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   } catch (err) {
     if (
       err instanceof DnaInProgressError ||

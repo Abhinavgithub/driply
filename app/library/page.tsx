@@ -42,9 +42,7 @@ function makeAttributeState(): ItemAttributeValues {
 
 function StatusBadge({ tone, label }: { tone: "success" | "warning"; label: string }) {
   return (
-    <span className={`pill ${tone === "success" ? "pill-success" : "pill-warning"}`}>
-      {label}
-    </span>
+    <span className={`pill ${tone === "success" ? "pill-success" : "pill-warning"}`}>{label}</span>
   );
 }
 
@@ -87,9 +85,13 @@ export default function LibraryPage() {
   useEffect(() => {
     const urls = files.map((f) => URL.createObjectURL(f));
     setPreviewUrls(urls);
-    return () => { urls.forEach((u) => URL.revokeObjectURL(u)); };
+    return () => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
   }, [files]);
-  const [editForm, setEditForm] = useState<{ kind: Item["kind"]; subtype: string } & ItemAttributeValues>({
+  const [editForm, setEditForm] = useState<
+    { kind: Item["kind"]; subtype: string } & ItemAttributeValues
+  >({
     kind: "TOP",
     subtype: getDefaultSubtypeForKind("TOP"),
     ...makeAttributeState(),
@@ -277,9 +279,7 @@ export default function LibraryPage() {
   return (
     <div className="space-y-6">
       {error ? (
-        <section className="app-card rounded-3xl p-4 text-sm text-danger">
-          {error}
-        </section>
+        <section className="app-card rounded-3xl p-4 text-sm text-danger">{error}</section>
       ) : null}
 
       <form onSubmit={onSubmit} className="app-card rounded-3xl p-4">
@@ -293,7 +293,10 @@ export default function LibraryPage() {
         <div
           className={`upload-dropzone${dragOver ? " drag-over" : ""}`}
           onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault();
@@ -311,16 +314,26 @@ export default function LibraryPage() {
           />
           <div className="upload-dropzone-icon">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 12V4M9 4L6 7M9 4l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M9 12V4M9 4L6 7M9 4l3 3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
               <path d="M3 14h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
           <div>
             <div className="text-sm font-medium text-foreground">
-              {files.length ? `${files.length} photo${files.length > 1 ? "s" : ""} selected` : "Drop photos here"}
+              {files.length
+                ? `${files.length} photo${files.length > 1 ? "s" : ""} selected`
+                : "Drop photos here"}
             </div>
             <div className="text-xs muted-copy mt-0.5">
-              {files.length ? "Click to change selection" : `or click to browse · up to ${MAX_UPLOAD_PHOTOS} images`}
+              {files.length
+                ? "Click to change selection"
+                : `or click to browse · up to ${MAX_UPLOAD_PHOTOS} images`}
             </div>
           </div>
         </div>
@@ -397,30 +410,28 @@ export default function LibraryPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            {renderAttributeSelect("colorFamily", attributes.colorFamily, (value) =>
-              setAttributes((prev) => ({ ...prev, colorFamily: value }))
-            )}
-            {renderAttributeSelect("pattern", attributes.pattern, (value) =>
-              setAttributes((prev) => ({ ...prev, pattern: value }))
-            )}
-            {renderAttributeSelect("styleProfile", attributes.styleProfile, (value) =>
-              setAttributes((prev) => ({ ...prev, styleProfile: value }))
-            )}
-            {renderAttributeSelect("formality", attributes.formality, (value) =>
-              setAttributes((prev) => ({ ...prev, formality: value }))
-            )}
-            {renderAttributeSelect("warmthLevel", attributes.warmthLevel, (value) =>
-              setAttributes((prev) => ({ ...prev, warmthLevel: value }))
-            )}
+              {renderAttributeSelect("colorFamily", attributes.colorFamily, (value) =>
+                setAttributes((prev) => ({ ...prev, colorFamily: value })),
+              )}
+              {renderAttributeSelect("pattern", attributes.pattern, (value) =>
+                setAttributes((prev) => ({ ...prev, pattern: value })),
+              )}
+              {renderAttributeSelect("styleProfile", attributes.styleProfile, (value) =>
+                setAttributes((prev) => ({ ...prev, styleProfile: value })),
+              )}
+              {renderAttributeSelect("formality", attributes.formality, (value) =>
+                setAttributes((prev) => ({ ...prev, formality: value })),
+              )}
+              {renderAttributeSelect("warmthLevel", attributes.warmthLevel, (value) =>
+                setAttributes((prev) => ({ ...prev, warmthLevel: value })),
+              )}
             </div>
           </div>
         ) : null}
       </form>
 
       {items.length === 0 ? (
-        <section className="app-card rounded-3xl p-6 text-sm muted-copy">
-          No items yet.
-        </section>
+        <section className="app-card rounded-3xl p-6 text-sm muted-copy">No items yet.</section>
       ) : null}
 
       {(["TOP", "BOTTOM", "SHOE"] as const).map((groupKind) => {
@@ -444,7 +455,9 @@ export default function LibraryPage() {
                 className="app-card flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-4 text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-foreground">{kindLabel(groupKind)}</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {kindLabel(groupKind)}
+                  </span>
                   <span className="rounded-full bg-[var(--surface-subtle)] px-2 py-0.5 text-xs font-medium muted-copy">
                     {list.length}
                   </span>
@@ -456,12 +469,22 @@ export default function LibraryPage() {
                   fill="none"
                   className={`muted-copy flex-shrink-0 transition-transform duration-200${isCollapsed ? "" : " rotate-180"}`}
                 >
-                  <path d="M3 6l5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="M3 6l5 5 5-5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </button>
             </h3>
 
-            <div id={`group-${groupKind}`} hidden={isCollapsed} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div
+              id={`group-${groupKind}`}
+              hidden={isCollapsed}
+              className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+            >
               {list.map((it) => {
                 const isEditing = editingId === it.id;
                 const status = getItemStatus(it);
@@ -534,19 +557,19 @@ export default function LibraryPage() {
 
                           <div className="grid gap-3">
                             {renderAttributeSelect("colorFamily", editForm.colorFamily, (value) =>
-                              setEditForm((prev) => ({ ...prev, colorFamily: value }))
+                              setEditForm((prev) => ({ ...prev, colorFamily: value })),
                             )}
                             {renderAttributeSelect("pattern", editForm.pattern, (value) =>
-                              setEditForm((prev) => ({ ...prev, pattern: value }))
+                              setEditForm((prev) => ({ ...prev, pattern: value })),
                             )}
                             {renderAttributeSelect("styleProfile", editForm.styleProfile, (value) =>
-                              setEditForm((prev) => ({ ...prev, styleProfile: value }))
+                              setEditForm((prev) => ({ ...prev, styleProfile: value })),
                             )}
                             {renderAttributeSelect("formality", editForm.formality, (value) =>
-                              setEditForm((prev) => ({ ...prev, formality: value }))
+                              setEditForm((prev) => ({ ...prev, formality: value })),
                             )}
                             {renderAttributeSelect("warmthLevel", editForm.warmthLevel, (value) =>
-                              setEditForm((prev) => ({ ...prev, warmthLevel: value }))
+                              setEditForm((prev) => ({ ...prev, warmthLevel: value })),
                             )}
                           </div>
 

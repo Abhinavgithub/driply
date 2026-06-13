@@ -19,14 +19,16 @@ const QuerySchema = z.object({
     .optional(),
 });
 
-
 export async function GET(req: NextRequest) {
   const currentUser = await getCurrentUser();
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   if (!(await checkRateLimit(currentUser.appUser.id, 20))) {
-    return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429 });
+    return NextResponse.json(
+      { error: "Too many requests. Try again in a minute." },
+      { status: 429 },
+    );
   }
 
   const { searchParams } = new URL(req.url);
@@ -47,9 +49,15 @@ export async function GET(req: NextRequest) {
   const dateKey = date ?? getServerDateKey();
 
   const [tops, bottoms, shoes] = await Promise.all([
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "TOP", analysisStatus: { not: "PENDING" } } }),
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "BOTTOM", analysisStatus: { not: "PENDING" } } }),
-    prisma.item.findMany({ where: { userId: currentUser.appUser.id, kind: "SHOE", analysisStatus: { not: "PENDING" } } }),
+    prisma.item.findMany({
+      where: { userId: currentUser.appUser.id, kind: "TOP", analysisStatus: { not: "PENDING" } },
+    }),
+    prisma.item.findMany({
+      where: { userId: currentUser.appUser.id, kind: "BOTTOM", analysisStatus: { not: "PENDING" } },
+    }),
+    prisma.item.findMany({
+      where: { userId: currentUser.appUser.id, kind: "SHOE", analysisStatus: { not: "PENDING" } },
+    }),
   ]);
 
   if (!tops.length || !bottoms.length || !shoes.length) {
@@ -120,7 +128,10 @@ export async function GET(req: NextRequest) {
   const recommendation = decision.options[0];
 
   if (!recommendation) {
-    return NextResponse.json({ error: "Missing wardrobe items to form an outfit." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing wardrobe items to form an outfit." },
+      { status: 400 },
+    );
   }
 
   const signedItems = await attachSignedPhotoUrls([

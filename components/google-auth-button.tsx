@@ -63,7 +63,12 @@ export function GoogleAuthButton(props: GoogleAuthButtonProps) {
   }
 
   return (
-    <button type="button" onClick={() => void onSignIn()} disabled={loading} className={props.className}>
+    <button
+      type="button"
+      onClick={() => void onSignIn()}
+      disabled={loading}
+      className={props.className}
+    >
       {loading ? (
         "Redirecting..."
       ) : (

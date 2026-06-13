@@ -33,7 +33,9 @@ export async function deleteProfilePhoto(path: string | null | undefined) {
   await supabase.storage.from(getSupabaseStorageBucket()).remove([path]);
 }
 
-export async function getSignedProfilePhotoUrl(path: string | null | undefined): Promise<string | null> {
+export async function getSignedProfilePhotoUrl(
+  path: string | null | undefined,
+): Promise<string | null> {
   if (!path) return null;
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.storage
@@ -46,11 +48,14 @@ export async function getSignedProfilePhotoUrl(path: string | null | undefined):
 
 const MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024; // 20 MB
 
-export async function downloadStorageObject(path: string | null | undefined): Promise<Buffer | null> {
+export async function downloadStorageObject(
+  path: string | null | undefined,
+): Promise<Buffer | null> {
   if (!path) return null;
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase.storage.from(getSupabaseStorageBucket()).download(path);
   if (error || !data) return null;
-  if (data.size > MAX_DOWNLOAD_BYTES) throw new Error("Storage object exceeds maximum download size.");
+  if (data.size > MAX_DOWNLOAD_BYTES)
+    throw new Error("Storage object exceeds maximum download size.");
   return Buffer.from(await data.arrayBuffer());
 }

@@ -114,9 +114,7 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
           return;
         } catch (fallbackError) {
           if (isHandledFetchError(fallbackError)) return;
-          setError(
-            fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
-          );
+          setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
         }
       }
     } finally {

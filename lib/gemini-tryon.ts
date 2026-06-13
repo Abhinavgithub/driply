@@ -52,7 +52,8 @@ export async function getTryOnModel(): Promise<string> {
 
 export function normalizeTryOnErrorCode(error: unknown): string {
   if (error instanceof TryOnApiError) return error.code;
-  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) return "TIMEOUT";
+  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"))
+    return "TIMEOUT";
   return "UNKNOWN";
 }
 
@@ -103,10 +104,7 @@ export async function generateTryOnImage(args: {
       body: JSON.stringify({
         contents: [
           {
-            parts: [
-              { text: args.prompt },
-              ...imageParts,
-            ],
+            parts: [{ text: args.prompt }, ...imageParts],
           },
         ],
         generationConfig: {
@@ -127,7 +125,11 @@ export async function generateTryOnImage(args: {
           : response.status >= 500
             ? "UPSTREAM_ERROR"
             : "BAD_REQUEST";
-    throw new TryOnApiError(`Gemini image generation failed: ${response.status}`, code, response.status);
+    throw new TryOnApiError(
+      `Gemini image generation failed: ${response.status}`,
+      code,
+      response.status,
+    );
   }
 
   const json = (await response.json()) as GeminiImageResponse;

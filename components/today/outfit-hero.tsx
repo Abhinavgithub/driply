@@ -56,7 +56,13 @@ function HeroTile({
 }
 
 /** Hero outfit collage: top (large) + bottom + shoes; clicking a tile swaps the look. */
-export function OutfitHero({ option, onSwap }: { option: RecommendationOption; onSwap: () => void }) {
+export function OutfitHero({
+  option,
+  onSwap,
+}: {
+  option: RecommendationOption;
+  onSwap: () => void;
+}) {
   return (
     <div className="outfit-hero">
       <HeroTile item={option.top} category="Top" main onSwap={onSwap} />

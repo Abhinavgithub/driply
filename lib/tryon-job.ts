@@ -5,7 +5,12 @@ import { prisma } from "@/lib/prisma";
 import { downloadStorageObject } from "@/lib/profile-media";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getSupabaseStorageBucket } from "@/lib/supabase/env";
-import { buildFluxTryOnPrompt, buildOpenAITryOnPrompt, buildTryOnPrompt, type TryOnPromptItem } from "@/lib/tryon-prompt";
+import {
+  buildFluxTryOnPrompt,
+  buildOpenAITryOnPrompt,
+  buildTryOnPrompt,
+  type TryOnPromptItem,
+} from "@/lib/tryon-prompt";
 
 const SIGNED_RESULT_TTL_SECONDS = 60 * 60;
 const JOB_RETENTION_DAYS = 7;
@@ -70,7 +75,14 @@ export async function processTryOnJob(jobId: string): Promise<void> {
           id: { in: [job.topItemId, job.bottomItemId, job.shoeItemId] },
           userId: job.userId,
         },
-        select: { id: true, kind: true, subtype: true, colorFamily: true, visualSummary: true, photoUrl: true },
+        select: {
+          id: true,
+          kind: true,
+          subtype: true,
+          colorFamily: true,
+          visualSummary: true,
+          photoUrl: true,
+        },
       }),
     ]);
 
@@ -83,9 +95,24 @@ export async function processTryOnJob(jobId: string): Promise<void> {
     }
 
     const itemMeta: readonly TryOnPromptItem[] = [
-      { kind: top.kind, subtype: top.subtype, colorFamily: top.colorFamily, visualSummary: top.visualSummary },
-      { kind: bottom.kind, subtype: bottom.subtype, colorFamily: bottom.colorFamily, visualSummary: bottom.visualSummary },
-      { kind: shoe.kind, subtype: shoe.subtype, colorFamily: shoe.colorFamily, visualSummary: shoe.visualSummary },
+      {
+        kind: top.kind,
+        subtype: top.subtype,
+        colorFamily: top.colorFamily,
+        visualSummary: top.visualSummary,
+      },
+      {
+        kind: bottom.kind,
+        subtype: bottom.subtype,
+        colorFamily: bottom.colorFamily,
+        visualSummary: bottom.visualSummary,
+      },
+      {
+        kind: shoe.kind,
+        subtype: shoe.subtype,
+        colorFamily: shoe.colorFamily,
+        visualSummary: shoe.visualSummary,
+      },
     ];
 
     let result: { imageBase64: string; mimeType: string };

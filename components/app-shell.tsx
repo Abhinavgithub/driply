@@ -75,7 +75,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         });
       })
       .catch(() => {});
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [user, apiFetch]);
 
   useEffect(() => {
@@ -116,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       ? user.user_metadata.full_name
       : typeof user?.user_metadata?.name === "string"
         ? user.user_metadata.name
-        : user?.email ?? "Account";
+        : (user?.email ?? "Account");
   const displayName = appProfile?.displayName || oauthDisplayName;
 
   const oauthAvatarUrl =
@@ -143,8 +145,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Home",
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <path d="M3 9.5L10 3l7 6.5V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-          <path d="M7 18v-6h6v6" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+          <path
+            d="M3 9.5L10 3l7 6.5V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinejoin="round"
+          />
+          <path d="M7 18v-6h6v6" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
       ),
     },
@@ -153,8 +160,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Wardrobe",
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.4"/>
-          <path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          <rect x="3" y="3" width="14" height="14" rx="3" stroke="currentColor" strokeWidth="1.4" />
+          <path
+            d="M7 7h6M7 10h6M7 13h4"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
         </svg>
       ),
     },
@@ -163,8 +175,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: "Profile",
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.4"/>
-          <path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          <circle cx="10" cy="7" r="3" stroke="currentColor" strokeWidth="1.4" />
+          <path
+            d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
         </svg>
       ),
     },
@@ -220,17 +237,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {showAppNav ? (
               <div
                 style={{
-                  width: 36, height: 36, borderRadius: 10,
-                  background: "var(--surface)", border: "1px solid var(--border)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--muted-foreground)", flexShrink: 0,
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "var(--muted-foreground)",
+                  flexShrink: 0,
                 }}
                 aria-hidden="true"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path
                     d="M8 2a4 4 0 0 0-4 4v3l-1 1v1h10v-1l-1-1V6a4 4 0 0 0-4-4zM6.5 13a1.5 1.5 0 0 0 3 0"
-                    stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
                   />
                 </svg>
               </div>
@@ -245,23 +270,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   aria-expanded={isProfileMenuOpen}
                   aria-haspopup="menu"
                   style={{
-                    width: 36, height: 36, borderRadius: 10,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
                     background: "oklch(75% 0.18 200 / 0.1)",
                     border: "1px solid oklch(75% 0.18 200 / 0.3)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                     fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                    fontSize: 13, fontWeight: 700,
+                    fontSize: 13,
+                    fontWeight: 700,
                     color: "oklch(75% 0.18 200)",
-                    cursor: "pointer", overflow: "hidden", flexShrink: 0,
+                    cursor: "pointer",
+                    overflow: "hidden",
+                    flexShrink: 0,
                   }}
                 >
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={avatarUrl}
-                      alt={displayName}
-                      className="h-full w-full object-cover"
-                    />
+                    <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
                   ) : (
                     displayName.charAt(0).toUpperCase()
                   )}

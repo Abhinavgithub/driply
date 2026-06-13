@@ -25,7 +25,7 @@ export function useApiFetch(): ApiFetch {
   }, []);
 
   return useCallback(
-    async <T,>(url: string, init?: RequestInit): Promise<T> => {
+    async <T>(url: string, init?: RequestInit): Promise<T> => {
       try {
         return await fetchJson<T>(url, {
           ...init,

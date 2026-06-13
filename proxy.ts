@@ -51,10 +51,7 @@ export async function proxy(request: NextRequest) {
   if (!user && isProtected) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/sign-in";
-    redirectUrl.searchParams.set(
-      "next",
-      normalizeNextPath(`${pathname}${request.nextUrl.search}`),
-    );
+    redirectUrl.searchParams.set("next", normalizeNextPath(`${pathname}${request.nextUrl.search}`));
     return copyCookies(response, NextResponse.redirect(redirectUrl));
   }
 

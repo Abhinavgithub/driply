@@ -49,8 +49,8 @@ export async function generateOpenAITryOnImage(args: {
   // Order: user reference photo first, then clothing items
   const imageFiles = await Promise.all(
     [tryOnResized, ...clothingResized].map((buf, i) =>
-      toFile(buf, `image-${i}.jpg`, { type: "image/jpeg" })
-    )
+      toFile(buf, `image-${i}.jpg`, { type: "image/jpeg" }),
+    ),
   );
 
   let response: Awaited<ReturnType<typeof client.images.edit>>;

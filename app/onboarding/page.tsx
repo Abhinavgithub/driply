@@ -18,7 +18,13 @@ type Previews = { TOP: string | null; BOTTOM: string | null; SHOE: string | null
 function ArrowRightIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M3 7h8M8 4l3 3-3 3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -26,7 +32,13 @@ function ArrowRightIcon() {
 function ArrowLeftIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-      <path d="M11 7H3M6 10l-3-3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M11 7H3M6 10l-3-3 3-3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -34,7 +46,13 @@ function ArrowLeftIcon() {
 function UploadIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <path d="M9 12V4M6 7l3-3 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M9 12V4M6 7l3-3 3 3"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path d="M3 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
@@ -44,7 +62,12 @@ function PersonIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="7" r="3" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M5 21c0-4 3-7 7-7s7 3 7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path
+        d="M5 21c0-4 3-7 7-7s7 3 7 7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -52,8 +75,19 @@ function PersonIcon() {
 function ShieldIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M8 1.5L2 4v4c0 3.3 2.5 6.4 6 7 3.5-.6 6-3.7 6-7V4L8 1.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-      <path d="M5.5 8l2 2 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 1.5L2 4v4c0 3.3 2.5 6.4 6 7 3.5-.6 6-3.7 6-7V4L8 1.5z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.5 8l2 2 3-3"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -92,8 +126,12 @@ export default function OnboardingPage() {
   // Refs that always hold the latest blob URLs so unmount cleanup can revoke them
   const previewsRef = useRef(previews);
   const tryOnPreviewRef = useRef(tryOnPreview);
-  useEffect(() => { previewsRef.current = previews; }, [previews]);
-  useEffect(() => { tryOnPreviewRef.current = tryOnPreview; }, [tryOnPreview]);
+  useEffect(() => {
+    previewsRef.current = previews;
+  }, [previews]);
+  useEffect(() => {
+    tryOnPreviewRef.current = tryOnPreview;
+  }, [tryOnPreview]);
 
   const inputRefMap: Record<ItemKind, React.RefObject<HTMLInputElement | null>> = {
     TOP: topInputRef,
@@ -121,7 +159,9 @@ export default function OnboardingPage() {
   // Revoke all blob URLs on unmount — reads from refs to get current URLs, not stale closure values
   useEffect(() => {
     return () => {
-      Object.values(previewsRef.current).forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      Object.values(previewsRef.current).forEach((url) => {
+        if (url) URL.revokeObjectURL(url);
+      });
       if (tryOnPreviewRef.current) URL.revokeObjectURL(tryOnPreviewRef.current);
     };
   }, []);
@@ -200,7 +240,10 @@ export default function OnboardingPage() {
     if (!file) return;
     e.target.value = "";
     const err = validateImageFile(file);
-    if (err) { setTryOnError(err); return; }
+    if (err) {
+      setTryOnError(err);
+      return;
+    }
     setTryOnError(null);
     setTryOnFile(file);
     const prev = tryOnPreview;
@@ -236,7 +279,9 @@ export default function OnboardingPage() {
 
   function goToApp() {
     setShowSuccess(true);
-    setTimeout(() => { router.push("/today"); }, 1800);
+    setTimeout(() => {
+      router.push("/today");
+    }, 1800);
   }
 
   const isAnyUploading = Object.values(uploading).some(Boolean);
@@ -257,7 +302,14 @@ export default function OnboardingPage() {
   const currentQuestion = QUIZ_QUESTIONS[quizStep];
 
   if (showDnaLoading) {
-    return <StyleDnaLoading onContinue={() => { setShowDnaLoading(false); setStep(1); }} />;
+    return (
+      <StyleDnaLoading
+        onContinue={() => {
+          setShowDnaLoading(false);
+          setStep(1);
+        }}
+      />
+    );
   }
 
   return (
@@ -285,15 +337,18 @@ export default function OnboardingPage() {
       {/* Main */}
       <main className="lp-auth-main" style={{ alignItems: "flex-start", paddingTop: 40 }}>
         <div className="lp-onboarding-card">
-
           {/* Progress */}
           {!showSuccess && (
             <div className="lp-onboarding-progress">
               <div className="lp-onboarding-progress-steps">
-                <div className={`lp-onboarding-progress-step${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}>
+                <div
+                  className={`lp-onboarding-progress-step${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}
+                >
                   <div className="lp-onboarding-progress-fill" />
                 </div>
-                <div className={`lp-onboarding-progress-step${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}>
+                <div
+                  className={`lp-onboarding-progress-step${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}
+                >
                   <div className="lp-onboarding-progress-fill" />
                 </div>
                 <div className={`lp-onboarding-progress-step${isStep2Active ? " active" : ""}`}>
@@ -301,10 +356,14 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="lp-onboarding-progress-labels">
-                <div className={`lp-onboarding-progress-label${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}>
+                <div
+                  className={`lp-onboarding-progress-label${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}
+                >
                   Your style
                 </div>
-                <div className={`lp-onboarding-progress-label${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}>
+                <div
+                  className={`lp-onboarding-progress-label${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}
+                >
                   Your wardrobe
                 </div>
                 <div className={`lp-onboarding-progress-label${isStep2Active ? " active" : ""}`}>
@@ -322,14 +381,20 @@ export default function OnboardingPage() {
               <p className="lp-onboarding-sub" style={{ textAlign: "center" }}>
                 driply is scanning your wardrobe and will have your first outfit ready shortly.
               </p>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--lp-muted)" }}>
-                <div style={{
-                  width: 16, height: 16, borderRadius: "50%",
-                  border: "2px solid var(--lp-border)",
-                  borderTopColor: "var(--lp-accent)",
-                  animation: "spin 0.7s linear infinite",
-                  flexShrink: 0,
-                }} />
+              <div
+                style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--lp-muted)" }}
+              >
+                <div
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: "50%",
+                    border: "2px solid var(--lp-border)",
+                    borderTopColor: "var(--lp-accent)",
+                    animation: "spin 0.7s linear infinite",
+                    flexShrink: 0,
+                  }}
+                />
                 <span style={{ fontSize: 13 }}>Loading your wardrobe…</span>
               </div>
             </div>
@@ -339,19 +404,23 @@ export default function OnboardingPage() {
           {!showSuccess && step === 0 && (
             <>
               <div className="lp-onboarding-body">
-                <div className="lp-onboarding-eyebrow">Step 1 of 3 · Question {quizStep + 1} of {QUIZ_QUESTIONS.length}</div>
+                <div className="lp-onboarding-eyebrow">
+                  Step 1 of 3 · Question {quizStep + 1} of {QUIZ_QUESTIONS.length}
+                </div>
                 <h2 className="lp-onboarding-title">{currentQuestion.question}</h2>
                 <p className="lp-onboarding-sub">
                   Select one — your answers personalise your daily outfit recommendations.
                 </p>
 
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: currentQuestion.options.length <= 3 ? "1fr" : "1fr 1fr",
-                  gap: 10,
-                  marginTop: 8,
-                  marginBottom: 24,
-                }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: currentQuestion.options.length <= 3 ? "1fr" : "1fr 1fr",
+                    gap: 10,
+                    marginTop: 8,
+                    marginBottom: 24,
+                  }}
+                >
                   {currentQuestion.options.map((option) => (
                     <button
                       key={option.value}
@@ -371,24 +440,26 @@ export default function OnboardingPage() {
                         transition: "border-color 0.15s, background 0.15s",
                       }}
                       onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--lp-accent)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          "var(--lp-accent)";
                       }}
                       onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--lp-border)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          "var(--lp-border)";
                       }}
                     >
                       <span style={{ fontSize: 14, fontWeight: 500, color: "var(--lp-text)" }}>
                         {option.label}
                       </span>
-                      <span style={{ fontSize: 12, color: "var(--lp-muted)" }}>
-                        {option.hint}
-                      </span>
+                      <span style={{ fontSize: 12, color: "var(--lp-muted)" }}>{option.hint}</span>
                     </button>
                   ))}
                 </div>
 
                 {/* Quiz sub-progress dots */}
-                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}>
+                <div
+                  style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}
+                >
                   {QUIZ_QUESTIONS.map((_, i) => (
                     <div
                       key={i}
@@ -396,11 +467,12 @@ export default function OnboardingPage() {
                         width: 6,
                         height: 6,
                         borderRadius: "50%",
-                        background: i === quizStep
-                          ? "var(--lp-accent)"
-                          : i < quizStep
+                        background:
+                          i === quizStep
                             ? "var(--lp-accent)"
-                            : "var(--lp-border)",
+                            : i < quizStep
+                              ? "var(--lp-accent)"
+                              : "var(--lp-border)",
                         opacity: i < quizStep ? 0.5 : 1,
                         transition: "background 0.2s",
                       }}
@@ -436,8 +508,8 @@ export default function OnboardingPage() {
                 <div className="lp-onboarding-eyebrow">Step 2 of 3</div>
                 <h2 className="lp-onboarding-title">Add your wardrobe</h2>
                 <p className="lp-onboarding-sub">
-                  Upload at least one photo per category to get daily outfit recommendations.
-                  You can always add more later.
+                  Upload at least one photo per category to get daily outfit recommendations. You
+                  can always add more later.
                 </p>
 
                 <div className="lp-onboarding-upload-grid">
@@ -462,7 +534,10 @@ export default function OnboardingPage() {
                             <button
                               type="button"
                               className="lp-onboarding-upload-remove"
-                              onClick={(e) => { e.stopPropagation(); removePreview(kind); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removePreview(kind);
+                              }}
                               aria-label={`Remove ${label} photo`}
                             >
                               <CloseIcon />
@@ -471,12 +546,16 @@ export default function OnboardingPage() {
                         ) : (
                           <div className="lp-onboarding-upload-icon-wrap">
                             {uploading[kind] ? (
-                              <div style={{
-                                width: 24, height: 24, borderRadius: "50%",
-                                border: "2px solid var(--lp-border)",
-                                borderTopColor: "var(--lp-accent)",
-                                animation: "spin 0.7s linear infinite",
-                              }} />
+                              <div
+                                style={{
+                                  width: 24,
+                                  height: 24,
+                                  borderRadius: "50%",
+                                  border: "2px solid var(--lp-border)",
+                                  borderTopColor: "var(--lp-accent)",
+                                  animation: "spin 0.7s linear infinite",
+                                }}
+                              />
                             ) : (
                               <div className="lp-onboarding-upload-icon">
                                 <UploadIcon />
@@ -488,7 +567,9 @@ export default function OnboardingPage() {
                           </div>
                         )}
                       </button>
-                      <div className={`lp-onboarding-upload-count${counts[kind] > 0 ? " has-items" : ""}`}>
+                      <div
+                        className={`lp-onboarding-upload-count${counts[kind] > 0 ? " has-items" : ""}`}
+                      >
                         {counts[kind] > 0 ? `${counts[kind]} added` : "None yet"}
                       </div>
                       {uploadErrors[kind] ? (
@@ -513,7 +594,10 @@ export default function OnboardingPage() {
                 <div className="lp-onboarding-btn-row">
                   <button
                     type="button"
-                    onClick={() => { setStep(0); setQuizStep(0); }}
+                    onClick={() => {
+                      setStep(0);
+                      setQuizStep(0);
+                    }}
                     disabled={isAnyUploading}
                     className="lp-onboarding-btn-back"
                   >
@@ -532,8 +616,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="lp-onboarding-note">
-                You can also add items anytime from your{" "}
-                <Link href="/library">Wardrobe</Link>.
+                You can also add items anytime from your <Link href="/library">Wardrobe</Link>.
               </div>
             </>
           )}
@@ -544,14 +627,22 @@ export default function OnboardingPage() {
               <div className="lp-onboarding-body">
                 <div className="lp-onboarding-eyebrow">
                   Step 3 of 3
-                  <span style={{ marginLeft: 4, opacity: 0.6, fontWeight: 400, letterSpacing: "0.04em", textTransform: "none" }}>
+                  <span
+                    style={{
+                      marginLeft: 4,
+                      opacity: 0.6,
+                      fontWeight: 400,
+                      letterSpacing: "0.04em",
+                      textTransform: "none",
+                    }}
+                  >
                     · Optional
                   </span>
                 </div>
                 <h2 className="lp-onboarding-title">AI outfit preview</h2>
                 <p className="lp-onboarding-sub">
-                  Upload a full-body photo to see how each outfit recommendation looks on you.
-                  Used only for AI previews — never shared.
+                  Upload a full-body photo to see how each outfit recommendation looks on you. Used
+                  only for AI previews — never shared.
                 </p>
 
                 {/* Full-body upload zone */}
@@ -573,7 +664,10 @@ export default function OnboardingPage() {
                       <button
                         type="button"
                         className="lp-onboarding-fullbody-remove"
-                        onClick={(e) => { e.stopPropagation(); removeTryOnPreview(); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeTryOnPreview();
+                        }}
                         aria-label="Remove try-on photo"
                       >
                         <CloseIcon />
@@ -583,12 +677,16 @@ export default function OnboardingPage() {
                     <div className="lp-onboarding-fullbody-icon-wrap">
                       <div className="lp-onboarding-fullbody-icon">
                         {tryOnUploading ? (
-                          <div style={{
-                            width: 24, height: 24, borderRadius: "50%",
-                            border: "2px solid var(--lp-border)",
-                            borderTopColor: "var(--lp-accent)",
-                            animation: "spin 0.7s linear infinite",
-                          }} />
+                          <div
+                            style={{
+                              width: 24,
+                              height: 24,
+                              borderRadius: "50%",
+                              border: "2px solid var(--lp-border)",
+                              borderTopColor: "var(--lp-accent)",
+                              animation: "spin 0.7s linear infinite",
+                            }}
+                          />
                         ) : (
                           <PersonIcon />
                         )}
@@ -596,12 +694,18 @@ export default function OnboardingPage() {
                       <div className="lp-onboarding-fullbody-title">
                         {tryOnUploading ? "Uploading…" : "Upload full-body photo"}
                       </div>
-                      <div className="lp-onboarding-fullbody-hint">JPG, PNG or WEBP · Max 10 MB</div>
+                      <div className="lp-onboarding-fullbody-hint">
+                        JPG, PNG or WEBP · Max 10 MB
+                      </div>
                     </div>
                   )}
                 </button>
 
-                {tryOnError ? <p className="lp-onboarding-error" style={{ marginBottom: 12 }}>{tryOnError}</p> : null}
+                {tryOnError ? (
+                  <p className="lp-onboarding-error" style={{ marginBottom: 12 }}>
+                    {tryOnError}
+                  </p>
+                ) : null}
 
                 {/* Save button — shown when a new file is picked but not yet saved */}
                 {tryOnFile && !tryOnSaved ? (
@@ -623,7 +727,8 @@ export default function OnboardingPage() {
                     <ShieldIcon />
                   </span>
                   <p className="lp-onboarding-privacy-text">
-                    <strong>Private by design.</strong> Your photo is used only to generate outfit previews and is never shared with third parties or used for advertising.
+                    <strong>Private by design.</strong> Your photo is used only to generate outfit
+                    previews and is never shared with third parties or used for advertising.
                   </p>
                 </div>
 

@@ -14,11 +14,7 @@ import { isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { useAuthUser } from "@/lib/hooks/use-auth-user";
 import { useRecommendations } from "@/lib/hooks/use-recommendations";
-import type {
-  ProfileResponse,
-  RecommendationOption,
-  WornHistoryItem,
-} from "@/lib/types/wardrobe";
+import type { ProfileResponse, RecommendationOption, WornHistoryItem } from "@/lib/types/wardrobe";
 
 type UserProfile = {
   displayName: string | null;

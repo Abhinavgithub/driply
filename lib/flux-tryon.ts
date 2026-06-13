@@ -35,7 +35,9 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
 
   let blob: Blob;
   try {
-    const timer = setTimeout(() => { /* no-op; HF SDK has its own timeout */ }, FLUX_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      /* no-op; HF SDK has its own timeout */
+    }, FLUX_TIMEOUT_MS);
     try {
       blob = await client.textToImage(
         {
@@ -54,7 +56,11 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
       throw new TryOnApiError("FLUX request timed out.", "TIMEOUT");
     }
     const msg = error instanceof Error ? error.message : String(error);
-    const code = msg.includes("429") ? "RATE_LIMITED" : msg.includes("401") || msg.includes("403") ? "UNAUTHORIZED" : "UPSTREAM_ERROR";
+    const code = msg.includes("429")
+      ? "RATE_LIMITED"
+      : msg.includes("401") || msg.includes("403")
+        ? "UNAUTHORIZED"
+        : "UPSTREAM_ERROR";
     throw new TryOnApiError(`FLUX generation failed: ${msg}`, code);
   }
 

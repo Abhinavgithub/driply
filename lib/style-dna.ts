@@ -16,9 +16,7 @@ const dnaTextSchema = z.object({
   archetypeName: z.string().trim().min(1).max(40),
   description: z.string().trim().min(1).max(300),
   traits: z.array(z.string().trim().max(20)).min(3).max(5),
-  colorPalette: z
-    .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
-    .length(5),
+  colorPalette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).length(5),
   imagePromptHints: z.array(z.string().trim().max(60)).min(3).max(5),
 });
 
@@ -96,8 +94,15 @@ async function generateDnaTextWithGemini(prompt: string): Promise<StyleDnaText> 
 
   type GeminiResponse = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const json = (await response.json()) as GeminiResponse;
-  let text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? "";
-  text = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  let text =
+    json.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text ?? "")
+      .join("")
+      .trim() ?? "";
+  text = text
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
   const first = text.indexOf("{");
   const last = text.lastIndexOf("}");
   if (first !== -1 && last !== -1) text = text.slice(first, last + 1);

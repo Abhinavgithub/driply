@@ -57,11 +57,7 @@ export default function SignInPageClient() {
             <p className="lp-auth-sub">Welcome back. Use Google to open your wardrobe.</p>
           </div>
 
-          <GoogleAuthButton
-            className="lp-auth-google-btn"
-            nextPath={nextPath}
-            onError={setError}
-          >
+          <GoogleAuthButton className="lp-auth-google-btn" nextPath={nextPath} onError={setError}>
             Log in with Google
           </GoogleAuthButton>
 
@@ -98,18 +94,13 @@ export default function SignInPageClient() {
               <Link href="/forgot-password">Forgot password?</Link>
             </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="lp-auth-primary-btn"
-            >
+            <button type="submit" disabled={isLoading} className="lp-auth-primary-btn">
               {isLoading ? "Signing in…" : "Log in with Email"}
             </button>
           </form>
 
           <p className="lp-auth-footer-text">
-            Don&apos;t have an account?{" "}
-            <Link href="/sign-up">Sign up</Link>
+            Don&apos;t have an account? <Link href="/sign-up">Sign up</Link>
           </p>
         </div>
       </main>

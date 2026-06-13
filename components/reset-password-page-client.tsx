@@ -92,7 +92,12 @@ export default function ResetPasswordPageClient() {
               <Link
                 href="/forgot-password"
                 className="lp-auth-primary-btn"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textDecoration: "none",
+                }}
               >
                 Request new link
               </Link>
@@ -102,7 +107,16 @@ export default function ResetPasswordPageClient() {
               <p className="lp-auth-success-msg" style={{ marginBottom: "24px" }}>
                 Password updated. You can now sign in with your new password.
               </p>
-              <Link href="/sign-in" className="lp-auth-primary-btn" style={{ display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}>
+              <Link
+                href="/sign-in"
+                className="lp-auth-primary-btn"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textDecoration: "none",
+                }}
+              >
                 Go to sign in
               </Link>
             </>
@@ -138,17 +152,12 @@ export default function ResetPasswordPageClient() {
                 {error && <p className="lp-auth-error-msg">{error}</p>}
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="lp-auth-primary-btn"
-              >
+              <button type="submit" disabled={isLoading} className="lp-auth-primary-btn">
                 {isLoading ? "Updating…" : "Update password"}
               </button>
             </form>
           )}
         </div>
-
       </main>
     </div>
   );

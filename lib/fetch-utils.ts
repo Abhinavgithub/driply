@@ -31,10 +31,7 @@ export function isHandledFetchError(error: unknown): boolean {
  * (error pages may be HTML). On success responses, parse failures throw so
  * callers are not silently handed an empty object instead of real data.
  */
-export async function fetchJson<T = unknown>(
-  url: string,
-  init?: RequestInit,
-): Promise<T> {
+export async function fetchJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     // Best-effort: error body may be HTML (e.g. Next.js 500 page)
