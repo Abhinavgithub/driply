@@ -1,5 +1,8 @@
 [build]
-  command = "npm run build"
+  # verify:css fails the deploy if the built CSS bundle dropped any styles
+  # (this build environment silently truncated globals.css before — see
+  # scripts/verify-built-css.mjs), so broken styling can never ship.
+  command = "npm run build && npm run verify:css"
 
 # NOTE: migrations are NOT run during the Netlify build. The build runner is
 # IPv4-only and cannot reach Supabase's direct connection host

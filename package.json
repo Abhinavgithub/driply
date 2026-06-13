@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "verify:css": "node scripts/verify-built-css.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",

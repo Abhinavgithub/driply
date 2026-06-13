@@ -43,3 +43,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Verify built CSS
+        run: npm run verify:css
