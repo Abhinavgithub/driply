@@ -54,9 +54,7 @@ export function buildOpenAITryOnPrompt(args: {
 }
 
 // For FLUX — text-only prompt, no reference images
-export function buildFluxTryOnPrompt(args: {
-  items: readonly TryOnPromptItem[];
-}): string {
+export function buildFluxTryOnPrompt(args: { items: readonly TryOnPromptItem[] }): string {
   const outfitDescription = buildItemDescriptions(args.items);
 
   return (

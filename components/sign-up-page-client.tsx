@@ -95,11 +95,7 @@ export default function SignUpPageClient() {
             </p>
           </div>
 
-          <GoogleAuthButton
-            className="lp-auth-google-btn"
-            nextPath={nextPath}
-            onError={setError}
-          >
+          <GoogleAuthButton className="lp-auth-google-btn" nextPath={nextPath} onError={setError}>
             Sign up with Google
           </GoogleAuthButton>
 
@@ -151,22 +147,17 @@ export default function SignUpPageClient() {
             </div>
 
             <p className="lp-auth-terms">
-              By signing up you agree to our{" "}
-              <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
+              By signing up you agree to our <a href="#">Terms of Service</a> and{" "}
+              <a href="#">Privacy Policy</a>.
             </p>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="lp-auth-primary-btn"
-            >
+            <button type="submit" disabled={isLoading} className="lp-auth-primary-btn">
               {isLoading ? "Creating account…" : "Sign up with Email"}
             </button>
           </form>
 
           <p className="lp-auth-footer-text">
-            Already have an account?{" "}
-            <Link href="/sign-in">Log in</Link>
+            Already have an account? <Link href="/sign-in">Log in</Link>
           </p>
         </div>
       </main>

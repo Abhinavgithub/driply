@@ -143,20 +143,20 @@ export function hexToColorName(hex: string): string {
 
   // Achromatic / near-neutral (low saturation)
   if (s < 0.12) {
-    if (l < 0.10) return "jet black";
+    if (l < 0.1) return "jet black";
     if (l < 0.22) return "charcoal";
     if (l < 0.38) return "dark grey";
     if (l < 0.54) return "mid grey";
     if (l < 0.68) return "cool grey";
-    if (l < 0.80) return "silver";
+    if (l < 0.8) return "silver";
     // Distinguish warm near-whites (cream/ivory) from cool near-whites
-    if (r > b + 10) return l > 0.90 ? "ivory" : "warm white";
-    return l > 0.90 ? "pure white" : "pearl";
+    if (r > b + 10) return l > 0.9 ? "ivory" : "warm white";
+    return l > 0.9 ? "pure white" : "pearl";
   }
 
   // Compute hue (0–360)
   let hue = 0;
-  if (max === r) hue = ((g - b) / chroma + 6) % 6 * 60;
+  if (max === r) hue = (((g - b) / chroma + 6) % 6) * 60;
   else if (max === g) hue = ((b - r) / chroma + 2) * 60;
   else hue = ((r - g) / chroma + 4) * 60;
 
@@ -170,7 +170,7 @@ export function hexToColorName(hex: string): string {
   }
 
   // Saturated / mid-dark
-  if (hue < 20 || hue >= 345) return l < 0.30 ? "deep red" : "red";
+  if (hue < 20 || hue >= 345) return l < 0.3 ? "deep red" : "red";
   if (hue < 40) return "burnt orange";
   if (hue < 65) return "warm amber";
   if (hue < 80) return "gold";
@@ -195,53 +195,90 @@ export function buildRuleBasedDna(prefs: StylePreferences): {
   if (dressCode === "formal" && priority === "style") {
     return {
       archetypeName: "Neo Formal",
-      description: "You bring serious tailoring energy to every room you enter. Sharp lines, elevated fits, and zero compromise.",
+      description:
+        "You bring serious tailoring energy to every room you enter. Sharp lines, elevated fits, and zero compromise.",
       traits: ["Tailored fits", "Monochrome", "Dressy", "Sharp cuts", "Statement pieces"],
       colorPalette: ["#1a1a1a", "#2c2c2c", "#f5f5f0", "#8b7355", "#d4af37"],
-      imagePromptHints: ["editorial high-contrast", "clean geometric composition", "premium fashion-tech", "dramatic shadows"],
+      imagePromptHints: [
+        "editorial high-contrast",
+        "clean geometric composition",
+        "premium fashion-tech",
+        "dramatic shadows",
+      ],
     };
   }
   if (colorPalette === "neutrals" && priority !== "comfort") {
     return {
       archetypeName: "Clean Minimalist",
-      description: "You keep it stripped back and intentional — every piece earns its place. Less noise, more impact.",
+      description:
+        "You keep it stripped back and intentional — every piece earns its place. Less noise, more impact.",
       traits: ["Minimal", "Neutral palette", "Clean lines", "Effortless", "Timeless"],
       colorPalette: ["#f0f0ee", "#c8c4bc", "#2a2a2a", "#8c8880", "#e8e0d5"],
-      imagePromptHints: ["high-key lighting", "clean white space", "minimalist composition", "fine editorial details"],
+      imagePromptHints: [
+        "high-key lighting",
+        "clean white space",
+        "minimalist composition",
+        "fine editorial details",
+      ],
     };
   }
   if (lifestyle === "active" || dressCode === "casual") {
     return {
       archetypeName: "Soft Streetwear",
-      description: "You mix comfort and cool like it's second nature — relaxed but always on point. Drip that moves with you.",
+      description:
+        "You mix comfort and cool like it's second nature — relaxed but always on point. Drip that moves with you.",
       traits: ["Streetwear", "Relaxed fit", "Layered", "Casual", "Urban"],
       colorPalette: ["#2d2d2d", "#8b9e87", "#d4cfc8", "#5c5247", "#a0937d"],
-      imagePromptHints: ["urban textures", "film grain", "street photography aesthetic", "layered composition"],
+      imagePromptHints: [
+        "urban textures",
+        "film grain",
+        "street photography aesthetic",
+        "layered composition",
+      ],
     };
   }
   if (colorPalette === "earth") {
     return {
       archetypeName: "Earth Romantic",
-      description: "Warm tones and natural textures are your language. You dress like the outdoors feel when it's golden hour.",
+      description:
+        "Warm tones and natural textures are your language. You dress like the outdoors feel when it's golden hour.",
       traits: ["Earth tones", "Natural fabrics", "Warm palette", "Relaxed", "Organic"],
       colorPalette: ["#8b6914", "#c4955a", "#d4b896", "#6b5a3e", "#e8d5b0"],
-      imagePromptHints: ["warm golden light", "natural linen textures", "organic composition", "earthy editorial"],
+      imagePromptHints: [
+        "warm golden light",
+        "natural linen textures",
+        "organic composition",
+        "earthy editorial",
+      ],
     };
   }
   if (colorPalette === "bold") {
     return {
       archetypeName: "Maximalist Bold",
-      description: "You walk in and the room notices — no accidental outfit, every choice is a statement. Bold or nothing.",
+      description:
+        "You walk in and the room notices — no accidental outfit, every choice is a statement. Bold or nothing.",
       traits: ["Bold colors", "Maximalist", "Statement looks", "Expressive", "High-impact"],
       colorPalette: ["#c0392b", "#2980b9", "#f39c12", "#27ae60", "#8e44ad"],
-      imagePromptHints: ["saturated editorial", "overlapping elements", "pattern mixing", "maximalist grid", "vibrant color blocking"],
+      imagePromptHints: [
+        "saturated editorial",
+        "overlapping elements",
+        "pattern mixing",
+        "maximalist grid",
+        "vibrant color blocking",
+      ],
     };
   }
   return {
     archetypeName: "Urban Monochrome",
-    description: "You move through the city in clean, considered looks that do the talking. Smart, modern, unfussy.",
+    description:
+      "You move through the city in clean, considered looks that do the talking. Smart, modern, unfussy.",
     traits: ["Monochrome", "Smart casual", "Polished", "Modern", "Structured"],
     colorPalette: ["#1c1c1c", "#4a4a4a", "#8a8a8a", "#d0d0d0", "#f2f2f2"],
-    imagePromptHints: ["editorial monochrome", "clean shadows", "urban fashion photography", "structured minimalism"],
+    imagePromptHints: [
+      "editorial monochrome",
+      "clean shadows",
+      "urban fashion photography",
+      "structured minimalism",
+    ],
   };
 }

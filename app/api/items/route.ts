@@ -70,7 +70,6 @@ type UploadResolution = {
   attributes: ItemAttributeValues;
 };
 
-
 function mergeUnknownAttributes(
   currentAttributes: ItemAttributeValues,
   aiAttributes: ItemAttributeValues,
@@ -134,16 +133,21 @@ async function resolveUploadMetadata(args: {
 
   const needsAiForKind = !manualKind || !manualSubtype;
   const needsAiForAttributes = hasUnknownAttributes(manualAttributes);
-  const shouldAttemptAi = await isAiClassificationEnabled() && (needsAiForKind || needsAiForAttributes);
+  const shouldAttemptAi =
+    (await isAiClassificationEnabled()) && (needsAiForKind || needsAiForAttributes);
 
   if (!shouldAttemptAi) {
     if (!manualKind) {
       console.info("[gemini:classification] skipped", {
-        reason: (await getAiClassificationDisabledReason()) || "Missing manual kind/subtype and AI classification disabled",
+        reason:
+          (await getAiClassificationDisabledReason()) ||
+          "Missing manual kind/subtype and AI classification disabled",
         manualKind,
         manualSubtype,
       });
-      throw new Error("AI could not infer kind and subtype. Add them in optional details or enable AI classification.");
+      throw new Error(
+        "AI could not infer kind and subtype. Add them in optional details or enable AI classification.",
+      );
     }
 
     // When kind is known but subtype isn't (e.g. onboarding), fall back to the
@@ -179,7 +183,8 @@ async function resolveUploadMetadata(args: {
     const resolvedSubtype =
       manualSubtype && isValidSubtypeForKind(resolvedKind, manualSubtype)
         ? manualSubtype
-        : classification.kind === resolvedKind && isValidSubtypeForKind(resolvedKind, classification.subtype)
+        : classification.kind === resolvedKind &&
+            isValidSubtypeForKind(resolvedKind, classification.subtype)
           ? classification.subtype
           : null;
 
@@ -193,17 +198,14 @@ async function resolveUploadMetadata(args: {
     const usedAiOutput =
       usedAiKindSubtype || aiFilledCount > 0 || Boolean(classification.visualSummary);
     const hasManualOverrides =
-      Boolean(manualKind && manualSubtype) || Object.values(manualAttributes).some((value) => value !== "UNKNOWN");
+      Boolean(manualKind && manualSubtype) ||
+      Object.values(manualAttributes).some((value) => value !== "UNKNOWN");
 
     return {
       kind: resolvedKind,
       subtype: resolvedSubtype,
       analysisStatus: "READY",
-      metadataSource: hasManualOverrides
-        ? usedAiOutput
-          ? "MIXED"
-          : "MANUAL"
-        : "AI",
+      metadataSource: hasManualOverrides ? (usedAiOutput ? "MIXED" : "MANUAL") : "AI",
       visualSummary:
         classification.visualSummary ||
         buildFallbackVisualSummary({
@@ -263,9 +265,7 @@ export const GET = withAuth(async (user, req) => {
   // ?ids=a,b,c narrows the result — used to mint fresh signed photo URLs when
   // a long-lived page's URLs expire.
   const idsParam = new URL(req.url).searchParams.get("ids");
-  const ids = idsParam
-    ? [...new Set(idsParam.split(",").filter(Boolean))].slice(0, 50)
-    : null;
+  const ids = idsParam ? [...new Set(idsParam.split(",").filter(Boolean))].slice(0, 50) : null;
 
   const items = await prisma.item.findMany({
     where: { userId: user.appUser.id, ...(ids ? { id: { in: ids } } : {}) },
@@ -279,222 +279,225 @@ const MAX_WARDROBE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const POST = withAuth(
   async (user, req) => {
-  const formData = await req.formData();
+    const formData = await req.formData();
 
-  const userId = user.appUser.id;
-  const manualKind = normalizeKindInput(formData.get("kind"));
-  const manualSubtype = normalizeSubtypeInput(formData.get("subtype"));
-  const rawPhotos = formData.getAll("photo");
-  const rawAttributes = {
-    colorFamily: formData.get("colorFamily"),
-    pattern: formData.get("pattern"),
-    styleProfile: formData.get("styleProfile"),
-    formality: formData.get("formality"),
-    warmthLevel: formData.get("warmthLevel"),
-  };
+    const userId = user.appUser.id;
+    const manualKind = normalizeKindInput(formData.get("kind"));
+    const manualSubtype = normalizeSubtypeInput(formData.get("subtype"));
+    const rawPhotos = formData.getAll("photo");
+    const rawAttributes = {
+      colorFamily: formData.get("colorFamily"),
+      pattern: formData.get("pattern"),
+      styleProfile: formData.get("styleProfile"),
+      formality: formData.get("formality"),
+      warmthLevel: formData.get("warmthLevel"),
+    };
 
-  const attributeParse = itemAttributePatchSchema.safeParse({
-    colorFamily: typeof rawAttributes.colorFamily === "string" ? rawAttributes.colorFamily : undefined,
-    pattern: typeof rawAttributes.pattern === "string" ? rawAttributes.pattern : undefined,
-    styleProfile: typeof rawAttributes.styleProfile === "string" ? rawAttributes.styleProfile : undefined,
-    formality: typeof rawAttributes.formality === "string" ? rawAttributes.formality : undefined,
-    warmthLevel: typeof rawAttributes.warmthLevel === "string" ? rawAttributes.warmthLevel : undefined,
-  });
+    const attributeParse = itemAttributePatchSchema.safeParse({
+      colorFamily:
+        typeof rawAttributes.colorFamily === "string" ? rawAttributes.colorFamily : undefined,
+      pattern: typeof rawAttributes.pattern === "string" ? rawAttributes.pattern : undefined,
+      styleProfile:
+        typeof rawAttributes.styleProfile === "string" ? rawAttributes.styleProfile : undefined,
+      formality: typeof rawAttributes.formality === "string" ? rawAttributes.formality : undefined,
+      warmthLevel:
+        typeof rawAttributes.warmthLevel === "string" ? rawAttributes.warmthLevel : undefined,
+    });
 
-  if (!attributeParse.success) {
-    return NextResponse.json(
-      { error: "Invalid payload. Expected optional kind, subtype, attributes, and photo." },
-      { status: 400 },
-    );
-  }
-
-  if ((manualKind && !manualSubtype) || (!manualKind && manualSubtype)) {
-    return NextResponse.json(
-      { error: "Kind and subtype must be provided together when added as optional details." },
-      { status: 400 },
-    );
-  }
-
-  if (manualKind && manualSubtype && !isValidSubtypeForKind(manualKind, manualSubtype)) {
-    return NextResponse.json(
-      { error: "Subtype does not match the selected kind." },
-      { status: 400 },
-    );
-  }
-
-  if (!rawPhotos || rawPhotos.length === 0) {
-    return NextResponse.json({ error: "Missing photo file(s)." }, { status: 400 });
-  }
-  if (rawPhotos.length > MAX_UPLOAD_PHOTOS) {
-    return NextResponse.json(
-      { error: `Too many photos. Max ${MAX_UPLOAD_PHOTOS} per upload.` },
-      { status: 400 },
-    );
-  }
-
-  const createdItems = [];
-  const providedManualAttributes = pickProvidedItemAttributes(attributeParse.data);
-  const manualAttributes = mergeItemAttributes(providedManualAttributes);
-
-  for (const rawPhoto of rawPhotos) {
-    if (!(rawPhoto instanceof Blob) || rawPhoto.size === 0) {
+    if (!attributeParse.success) {
       return NextResponse.json(
-        { error: "One of the selected photos is invalid." },
+        { error: "Invalid payload. Expected optional kind, subtype, attributes, and photo." },
         { status: 400 },
       );
     }
 
-    const photoResult = await validateImageBlob(rawPhoto, MAX_WARDROBE_PHOTO_BYTES, "photo");
-    if (!photoResult.ok) {
-      return NextResponse.json({ error: photoResult.error }, { status: 400 });
+    if ((manualKind && !manualSubtype) || (!manualKind && manualSubtype)) {
+      return NextResponse.json(
+        { error: "Kind and subtype must be provided together when added as optional details." },
+        { status: 400 },
+      );
     }
 
-    const itemId = crypto.randomUUID();
-    const { bytes, mime: verifiedMime, ext } = photoResult;
+    if (manualKind && manualSubtype && !isValidSubtypeForKind(manualKind, manualSubtype)) {
+      return NextResponse.json(
+        { error: "Subtype does not match the selected kind." },
+        { status: 400 },
+      );
+    }
 
-    let photoPath = "";
-    try {
-      photoPath = await uploadWardrobePhoto({
-        userId,
-        itemId,
-        bytes,
-        extension: ext,
-        contentType: verifiedMime,
-      });
+    if (!rawPhotos || rawPhotos.length === 0) {
+      return NextResponse.json({ error: "Missing photo file(s)." }, { status: 400 });
+    }
+    if (rawPhotos.length > MAX_UPLOAD_PHOTOS) {
+      return NextResponse.json(
+        { error: `Too many photos. Max ${MAX_UPLOAD_PHOTOS} per upload.` },
+        { status: 400 },
+      );
+    }
 
-      const resolved = await resolveUploadMetadata({
-        bytes,
-        manualKind,
-        manualSubtype,
-        manualAttributes,
-      });
+    const createdItems = [];
+    const providedManualAttributes = pickProvidedItemAttributes(attributeParse.data);
+    const manualAttributes = mergeItemAttributes(providedManualAttributes);
 
-      const item = await prisma.item.create({
-        data: {
-          id: itemId,
-          userId,
-          kind: resolved.kind,
-          subtype: resolved.subtype,
-          ...resolved.attributes,
-          analysisStatus: resolved.analysisStatus,
-          metadataSource: resolved.metadataSource,
-          visualSummary: resolved.visualSummary,
-          analysisConfidence: resolved.analysisConfidence,
-          analysisModel: resolved.analysisModel,
-          analysisPromptVersion: resolved.analysisPromptVersion,
-          analysisErrorCode: resolved.analysisErrorCode,
-          photoUrl: photoPath,
-        },
-      });
-      createdItems.push(item);
-    } catch (error) {
-      if (photoPath) {
-        await deleteWardrobePhoto(photoPath);
+    for (const rawPhoto of rawPhotos) {
+      if (!(rawPhoto instanceof Blob) || rawPhoto.size === 0) {
+        return NextResponse.json(
+          { error: "One of the selected photos is invalid." },
+          { status: 400 },
+        );
       }
-      throw error;
-    }
-  }
 
-  return NextResponse.json({ items: await attachSignedPhotoUrls(createdItems) });
+      const photoResult = await validateImageBlob(rawPhoto, MAX_WARDROBE_PHOTO_BYTES, "photo");
+      if (!photoResult.ok) {
+        return NextResponse.json({ error: photoResult.error }, { status: 400 });
+      }
+
+      const itemId = crypto.randomUUID();
+      const { bytes, mime: verifiedMime, ext } = photoResult;
+
+      let photoPath = "";
+      try {
+        photoPath = await uploadWardrobePhoto({
+          userId,
+          itemId,
+          bytes,
+          extension: ext,
+          contentType: verifiedMime,
+        });
+
+        const resolved = await resolveUploadMetadata({
+          bytes,
+          manualKind,
+          manualSubtype,
+          manualAttributes,
+        });
+
+        const item = await prisma.item.create({
+          data: {
+            id: itemId,
+            userId,
+            kind: resolved.kind,
+            subtype: resolved.subtype,
+            ...resolved.attributes,
+            analysisStatus: resolved.analysisStatus,
+            metadataSource: resolved.metadataSource,
+            visualSummary: resolved.visualSummary,
+            analysisConfidence: resolved.analysisConfidence,
+            analysisModel: resolved.analysisModel,
+            analysisPromptVersion: resolved.analysisPromptVersion,
+            analysisErrorCode: resolved.analysisErrorCode,
+            photoUrl: photoPath,
+          },
+        });
+        createdItems.push(item);
+      } catch (error) {
+        if (photoPath) {
+          await deleteWardrobePhoto(photoPath);
+        }
+        throw error;
+      }
+    }
+
+    return NextResponse.json({ items: await attachSignedPhotoUrls(createdItems) });
   },
   { key: (u) => `items:post:${u.appUser.id}`, max: 20 },
 );
 
 export const DELETE = withAuth(
   async (user, req) => {
-  const json = await req.json().catch(() => null);
-  const parsed = DeleteBodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload: expected itemId." }, { status: 400 });
-  }
+    const json = await req.json().catch(() => null);
+    const parsed = DeleteBodySchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid payload: expected itemId." }, { status: 400 });
+    }
 
-  const existingItem = await prisma.item.findFirst({
-    where: { id: parsed.data.itemId, userId: user.appUser.id },
-  });
+    const existingItem = await prisma.item.findFirst({
+      where: { id: parsed.data.itemId, userId: user.appUser.id },
+    });
 
-  if (!existingItem) {
-    return NextResponse.json({ error: "Item not found." }, { status: 404 });
-  }
+    if (!existingItem) {
+      return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    }
 
-  // OutfitHistory rows referencing this item are preserved — the FK relations
-  // null out their item ids (onDelete: SetNull), keeping worn days intact.
-  await prisma.item.delete({
-    where: { id: parsed.data.itemId, userId: user.appUser.id },
-  });
+    // OutfitHistory rows referencing this item are preserved — the FK relations
+    // null out their item ids (onDelete: SetNull), keeping worn days intact.
+    await prisma.item.delete({
+      where: { id: parsed.data.itemId, userId: user.appUser.id },
+    });
 
-  await deleteWardrobePhoto(existingItem.photoUrl);
+    await deleteWardrobePhoto(existingItem.photoUrl);
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true });
   },
   { key: (u) => `items:delete:${u.appUser.id}`, max: 30 },
 );
 
 export const PATCH = withAuth(
   async (user, req) => {
-  const json = await req.json().catch(() => null);
-  const parsed = UpdateBodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid payload: expected itemId plus editable attributes or subtype." },
-      { status: 400 },
-    );
-  }
+    const json = await req.json().catch(() => null);
+    const parsed = UpdateBodySchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid payload: expected itemId plus editable attributes or subtype." },
+        { status: 400 },
+      );
+    }
 
-  const { itemId, kind, subtype, ...attributes } = parsed.data;
-  const existingItem = await prisma.item.findFirst({
-    where: { id: itemId, userId: user.appUser.id },
-  });
+    const { itemId, kind, subtype, ...attributes } = parsed.data;
+    const existingItem = await prisma.item.findFirst({
+      where: { id: itemId, userId: user.appUser.id },
+    });
 
-  if (!existingItem) {
-    return NextResponse.json({ error: "Item not found." }, { status: 404 });
-  }
+    if (!existingItem) {
+      return NextResponse.json({ error: "Item not found." }, { status: 404 });
+    }
 
-  const nextKind = kind ?? existingItem.kind;
-  const nextSubtype = subtype?.trim() ?? existingItem.subtype;
-  if (!isValidSubtypeForKind(nextKind, nextSubtype)) {
-    return NextResponse.json(
-      { error: "Subtype does not match the selected kind." },
-      { status: 400 },
-    );
-  }
+    const nextKind = kind ?? existingItem.kind;
+    const nextSubtype = subtype?.trim() ?? existingItem.subtype;
+    if (!isValidSubtypeForKind(nextKind, nextSubtype)) {
+      return NextResponse.json(
+        { error: "Subtype does not match the selected kind." },
+        { status: 400 },
+      );
+    }
 
-  const updated = await prisma.item.update({
-    where: { id: itemId, userId: user.appUser.id },
-    data: {
-      ...(kind ? { kind } : {}),
-      ...(subtype ? { subtype: nextSubtype } : {}),
-      ...attributes,
-      analysisStatus: hasUnknownAttributes(
-        mergeItemAttributes({
-          colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
-          pattern: attributes.pattern ?? existingItem.pattern,
-          styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
-          formality: attributes.formality ?? existingItem.formality,
-          warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
+    const updated = await prisma.item.update({
+      where: { id: itemId, userId: user.appUser.id },
+      data: {
+        ...(kind ? { kind } : {}),
+        ...(subtype ? { subtype: nextSubtype } : {}),
+        ...attributes,
+        analysisStatus: hasUnknownAttributes(
+          mergeItemAttributes({
+            colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
+            pattern: attributes.pattern ?? existingItem.pattern,
+            styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
+            formality: attributes.formality ?? existingItem.formality,
+            warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
+          }),
+        )
+          ? "SKIPPED"
+          : "READY",
+        metadataSource: "MANUAL",
+        visualSummary: buildFallbackVisualSummary({
+          subtype: nextSubtype,
+          attributes: {
+            colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
+            pattern: attributes.pattern ?? existingItem.pattern,
+            styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
+            formality: attributes.formality ?? existingItem.formality,
+            warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
+          },
         }),
-      )
-        ? "SKIPPED"
-        : "READY",
-      metadataSource: "MANUAL",
-      visualSummary: buildFallbackVisualSummary({
-        subtype: nextSubtype,
-        attributes: {
-          colorFamily: attributes.colorFamily ?? existingItem.colorFamily,
-          pattern: attributes.pattern ?? existingItem.pattern,
-          styleProfile: attributes.styleProfile ?? existingItem.styleProfile,
-          formality: attributes.formality ?? existingItem.formality,
-          warmthLevel: attributes.warmthLevel ?? existingItem.warmthLevel,
-        },
-      }),
-      analysisConfidence: null,
-      analysisModel: null,
-      analysisPromptVersion: null,
-      analysisErrorCode: null,
-    },
-  });
+        analysisConfidence: null,
+        analysisModel: null,
+        analysisPromptVersion: null,
+        analysisErrorCode: null,
+      },
+    });
 
-  const [signedItem] = await attachSignedPhotoUrls([updated]);
-  return NextResponse.json({ ok: true, item: signedItem });
+    const [signedItem] = await attachSignedPhotoUrls([updated]);
+    return NextResponse.json({ ok: true, item: signedItem });
   },
   { key: (u) => `items:patch:${u.appUser.id}`, max: 30 },
 );

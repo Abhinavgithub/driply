@@ -21,7 +21,8 @@ export function parseStylePreferences(raw: unknown): StylePreferences | null {
     !PRIORITY_VALUES.includes(p.priority as never) ||
     !COLOR_PALETTE_VALUES.includes(p.colorPalette as never) ||
     !TEMP_SENSITIVITY_VALUES.includes(p.tempSensitivity as never)
-  ) return null;
+  )
+    return null;
   return p as unknown as StylePreferences;
 }
 

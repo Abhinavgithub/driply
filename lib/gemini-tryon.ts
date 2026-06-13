@@ -1,6 +1,7 @@
 import sharp from "sharp";
 
 import { getConfig, isEnabledFlag } from "@/lib/appConfig";
+import { getGeminiApiKey } from "@/lib/env";
 
 const DEFAULT_TRYON_MODEL = "gemini-2.5-flash-image";
 const TRYON_TIMEOUT_MS = 45000;
@@ -42,7 +43,7 @@ export class TryOnApiError extends Error {
 }
 
 export async function isAiTryOnEnabled(): Promise<boolean> {
-  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.GEMINI_API_KEY?.trim());
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(getGeminiApiKey());
 }
 
 export async function getTryOnModel(): Promise<string> {
@@ -51,7 +52,8 @@ export async function getTryOnModel(): Promise<string> {
 
 export function normalizeTryOnErrorCode(error: unknown): string {
   if (error instanceof TryOnApiError) return error.code;
-  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) return "TIMEOUT";
+  if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"))
+    return "TIMEOUT";
   return "UNKNOWN";
 }
 
@@ -75,7 +77,7 @@ export async function generateTryOnImage(args: {
   clothingImages: Array<{ bytes: Buffer }>;
   prompt: string;
 }): Promise<TryOnResult> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new TryOnApiError("Missing Gemini API key.", "MISSING_API_KEY");
   }
@@ -102,10 +104,7 @@ export async function generateTryOnImage(args: {
       body: JSON.stringify({
         contents: [
           {
-            parts: [
-              { text: args.prompt },
-              ...imageParts,
-            ],
+            parts: [{ text: args.prompt }, ...imageParts],
           },
         ],
         generationConfig: {
@@ -126,7 +125,11 @@ export async function generateTryOnImage(args: {
           : response.status >= 500
             ? "UPSTREAM_ERROR"
             : "BAD_REQUEST";
-    throw new TryOnApiError(`Gemini image generation failed: ${response.status}`, code, response.status);
+    throw new TryOnApiError(
+      `Gemini image generation failed: ${response.status}`,
+      code,
+      response.status,
+    );
   }
 
   const json = (await response.json()) as GeminiImageResponse;

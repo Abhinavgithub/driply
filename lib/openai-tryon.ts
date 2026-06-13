@@ -3,6 +3,7 @@ import sharp from "sharp";
 
 import { TryOnApiError, type TryOnResult } from "@/lib/gemini-tryon";
 import { getConfig, isEnabledFlag } from "@/lib/appConfig";
+import { getOpenAiApiKey } from "@/lib/env";
 
 const DEFAULT_MODEL = "gpt-image-2";
 const TRYON_TIMEOUT_MS = 120000; // gpt-image-2 with 4 input images can take 60-90s
@@ -10,7 +11,7 @@ const MAX_TRYON_PHOTO_DIMENSION = 768;
 const MAX_CLOTHING_DIMENSION = 384;
 
 export async function isOpenAITryOnEnabled(): Promise<boolean> {
-  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.OPENAI_API_KEY?.trim());
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(getOpenAiApiKey());
 }
 
 export function getOpenAITryOnModel(): string {
@@ -30,7 +31,7 @@ export async function generateOpenAITryOnImage(args: {
   clothingImages: Array<{ bytes: Buffer }>;
   prompt: string;
 }): Promise<TryOnResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = getOpenAiApiKey();
   if (!apiKey) throw new TryOnApiError("Missing OpenAI API key.", "MISSING_API_KEY");
 
   const model = getOpenAITryOnModel();
@@ -48,8 +49,8 @@ export async function generateOpenAITryOnImage(args: {
   // Order: user reference photo first, then clothing items
   const imageFiles = await Promise.all(
     [tryOnResized, ...clothingResized].map((buf, i) =>
-      toFile(buf, `image-${i}.jpg`, { type: "image/jpeg" })
-    )
+      toFile(buf, `image-${i}.jpg`, { type: "image/jpeg" }),
+    ),
   );
 
   let response: Awaited<ReturnType<typeof client.images.edit>>;

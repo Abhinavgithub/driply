@@ -34,57 +34,60 @@ export const POST = withAuth(async (currentUser) => {
   // Atomic check-then-write: serializable isolation prevents two concurrent
   // requests from both passing the in-progress / cooldown guards before either writes.
   try {
-    await prisma.$transaction(async (tx) => {
-      const [txUser, txExisting] = await Promise.all([
-        tx.user.findUnique({
-          where: { id: userId },
-          select: { lastDnaRegenAt: true },
-        }),
-        tx.styleDNA.findUnique({
-          where: { userId },
-          select: { textStatus: true },
-        }),
-      ]);
+    await prisma.$transaction(
+      async (tx) => {
+        const [txUser, txExisting] = await Promise.all([
+          tx.user.findUnique({
+            where: { id: userId },
+            select: { lastDnaRegenAt: true },
+          }),
+          tx.styleDNA.findUnique({
+            where: { userId },
+            select: { textStatus: true },
+          }),
+        ]);
 
-      if (txExisting?.textStatus === "PENDING" || txExisting?.textStatus === "GENERATING") {
-        throw new DnaInProgressError();
-      }
-
-      // Skip cooldown only if the previous run explicitly failed.
-      const bypassCooldown = txExisting?.textStatus === "FAILED";
-      if (!bypassCooldown && txUser?.lastDnaRegenAt) {
-        const elapsed = Date.now() - txUser.lastDnaRegenAt.getTime();
-        if (elapsed < REGEN_COOLDOWN_MS) {
-          throw new DnaCooldownError(Math.ceil((REGEN_COOLDOWN_MS - elapsed) / 1000));
+        if (txExisting?.textStatus === "PENDING" || txExisting?.textStatus === "GENERATING") {
+          throw new DnaInProgressError();
         }
-      }
 
-      await Promise.all([
-        tx.user.update({
-          where: { id: userId },
-          data: { lastDnaRegenAt: new Date() },
-        }),
-        tx.styleDNA.upsert({
-          where: { userId },
-          create: {
-            userId,
-            archetypeName: "",
-            description: "",
-            traits: [],
-            colorPalette: [],
-            imagePromptHints: [],
-            textStatus: "PENDING",
-            moodboardStatus: "PENDING",
-            generationTrigger: "manual",
-          },
-          update: {
-            textStatus: "PENDING",
-            moodboardStatus: "PENDING",
-            generationTrigger: "manual",
-          },
-        }),
-      ]);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        // Skip cooldown only if the previous run explicitly failed.
+        const bypassCooldown = txExisting?.textStatus === "FAILED";
+        if (!bypassCooldown && txUser?.lastDnaRegenAt) {
+          const elapsed = Date.now() - txUser.lastDnaRegenAt.getTime();
+          if (elapsed < REGEN_COOLDOWN_MS) {
+            throw new DnaCooldownError(Math.ceil((REGEN_COOLDOWN_MS - elapsed) / 1000));
+          }
+        }
+
+        await Promise.all([
+          tx.user.update({
+            where: { id: userId },
+            data: { lastDnaRegenAt: new Date() },
+          }),
+          tx.styleDNA.upsert({
+            where: { userId },
+            create: {
+              userId,
+              archetypeName: "",
+              description: "",
+              traits: [],
+              colorPalette: [],
+              imagePromptHints: [],
+              textStatus: "PENDING",
+              moodboardStatus: "PENDING",
+              generationTrigger: "manual",
+            },
+            update: {
+              textStatus: "PENDING",
+              moodboardStatus: "PENDING",
+              generationTrigger: "manual",
+            },
+          }),
+        ]);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   } catch (err) {
     if (
       err instanceof DnaInProgressError ||
@@ -97,7 +100,10 @@ export const POST = withAuth(async (currentUser) => {
     }
     if (err instanceof DnaCooldownError) {
       return NextResponse.json(
-        { error: "You can regenerate your Style DNA once every 24 hours.", retryAfter: err.retryAfter },
+        {
+          error: "You can regenerate your Style DNA once every 24 hours.",
+          retryAfter: err.retryAfter,
+        },
         { status: 429, headers: { "Retry-After": String(err.retryAfter) } },
       );
     }

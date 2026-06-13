@@ -48,7 +48,9 @@ export type RecommendationResult = {
   debugScores: ScoreBreakdown;
 };
 
-export function getRecommendationCandidateId(result: Pick<RecommendationResult, "top" | "bottom" | "shoe">) {
+export function getRecommendationCandidateId(
+  result: Pick<RecommendationResult, "top" | "bottom" | "shoe">,
+) {
   return [result.top.id, result.bottom.id, result.shoe.id].join("|");
 }
 
@@ -75,7 +77,7 @@ function getPersonalizedWeights(prefs?: StylePreferences | null): ScoringWeights
   if (prefs) {
     if (prefs.dressCode === "casual") formality = 0.05;
     else if (prefs.dressCode === "office") formality = 0.15;
-    else if (prefs.dressCode === "formal") formality = 0.20;
+    else if (prefs.dressCode === "formal") formality = 0.2;
 
     if (prefs.priority === "comfort") style = 0.08;
     else if (prefs.priority === "style") style = 0.22;
@@ -180,11 +182,11 @@ function rainBonusForCombo(args: {
         ? -2
         : topSt === "shirt"
           ? 0
-        : topSt === "long_sleeve"
-          ? -1
-          : topSt === "hoodie" || topSt === "sweater" || topSt === "jacket"
-            ? 2
-            : 0;
+          : topSt === "long_sleeve"
+            ? -1
+            : topSt === "hoodie" || topSt === "sweater" || topSt === "jacket"
+              ? 2
+              : 0;
     score += bottomSt === "jeans" ? 2 : bottomSt === "shorts" ? -3 : 0;
 
     const rainIntensity = clamp(args.precipitationMm / 10, 0, 1);
@@ -227,7 +229,11 @@ function pairColorScore(a: ColorFamily, b: ColorFamily) {
   return 0.2;
 }
 
-function scoreColorHarmony(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function scoreColorHarmony(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   const pairScores = [
     pairColorScore(top.colorFamily, bottom.colorFamily),
     pairColorScore(top.colorFamily, shoe.colorFamily),
@@ -236,12 +242,18 @@ function scoreColorHarmony(top: ItemWithAttributes, bottom: ItemWithAttributes, 
   return clamp((pairScores[0] * 1.2 + pairScores[1] + pairScores[2]) / 3.2, -1, 1);
 }
 
-function scorePatternBalance(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function scorePatternBalance(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   const patterns: Pattern[] = [top.pattern, bottom.pattern, shoe.pattern];
   const unknownCount = patterns.filter((pattern) => pattern === "UNKNOWN").length;
   if (unknownCount === patterns.length) return 0;
 
-  const patternedCount = patterns.filter((pattern) => pattern !== "SOLID" && pattern !== "UNKNOWN").length;
+  const patternedCount = patterns.filter(
+    (pattern) => pattern !== "SOLID" && pattern !== "UNKNOWN",
+  ).length;
   const solidCount = patterns.filter((pattern) => pattern === "SOLID").length;
 
   if (patternedCount === 0) return 0.35;
@@ -254,16 +266,23 @@ function scorePatternBalance(top: ItemWithAttributes, bottom: ItemWithAttributes
 function pairStyleScore(a: StyleProfile, b: StyleProfile) {
   if (a === "UNKNOWN" || b === "UNKNOWN") return 0;
   if (a === b) return 1;
-  if ((a === "CASUAL" && b === "SMART_CASUAL") || (a === "SMART_CASUAL" && b === "CASUAL")) return 0.55;
+  if ((a === "CASUAL" && b === "SMART_CASUAL") || (a === "SMART_CASUAL" && b === "CASUAL"))
+    return 0.55;
   if ((a === "CASUAL" && b === "ATHLEISURE") || (a === "ATHLEISURE" && b === "CASUAL")) return 0.7;
-  if ((a === "SMART_CASUAL" && b === "FORMAL") || (a === "FORMAL" && b === "SMART_CASUAL")) return 0.45;
-  if ((a === "ATHLEISURE" && b === "SMART_CASUAL") || (a === "SMART_CASUAL" && b === "ATHLEISURE")) return -0.2;
+  if ((a === "SMART_CASUAL" && b === "FORMAL") || (a === "FORMAL" && b === "SMART_CASUAL"))
+    return 0.45;
+  if ((a === "ATHLEISURE" && b === "SMART_CASUAL") || (a === "SMART_CASUAL" && b === "ATHLEISURE"))
+    return -0.2;
   if ((a === "ATHLEISURE" && b === "FORMAL") || (a === "FORMAL" && b === "ATHLEISURE")) return -0.9;
   if ((a === "CASUAL" && b === "FORMAL") || (a === "FORMAL" && b === "CASUAL")) return -0.75;
   return 0;
 }
 
-function scoreStyleConsistency(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function scoreStyleConsistency(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   return clamp(
     (pairStyleScore(top.styleProfile, bottom.styleProfile) * 1.2 +
       pairStyleScore(top.styleProfile, shoe.styleProfile) +
@@ -274,15 +293,25 @@ function scoreStyleConsistency(top: ItemWithAttributes, bottom: ItemWithAttribut
   );
 }
 
-function scoreFormalityAlignment(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
-  const values = [top.formality, bottom.formality, shoe.formality].map((value) => formalityScale[value]);
+function scoreFormalityAlignment(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
+  const values = [top.formality, bottom.formality, shoe.formality].map(
+    (value) => formalityScale[value],
+  );
   const spread = Math.max(...values) - Math.min(...values);
   if (spread === 0) return 1;
   if (spread === 1) return 0.35;
   return -0.8;
 }
 
-function expectedWarmthForWeather(temperatureC: number, precipitationMm: number, biasShift = 0): WarmthLevel {
+function expectedWarmthForWeather(
+  temperatureC: number,
+  precipitationMm: number,
+  biasShift = 0,
+): WarmthLevel {
   const levels: WarmthLevel[] = ["LIGHT", "MID", "WARM"];
   const base = precipitationMm >= 3 || temperatureC < 12 ? 2 : temperatureC < 22 ? 1 : 0;
   return levels[Math.min(2, Math.max(0, base + biasShift))];
@@ -297,8 +326,11 @@ function scoreWarmthCoherence(
   biasShift = 0,
 ) {
   const target = warmthScale[expectedWarmthForWeather(temperatureC, precipitationMm, biasShift)];
-  const values = [top.warmthLevel, bottom.warmthLevel, shoe.warmthLevel].map((value) => warmthScale[value]);
-  const meanDistance = values.reduce((sum, value) => sum + Math.abs(value - target), 0) / values.length;
+  const values = [top.warmthLevel, bottom.warmthLevel, shoe.warmthLevel].map(
+    (value) => warmthScale[value],
+  );
+  const meanDistance =
+    values.reduce((sum, value) => sum + Math.abs(value - target), 0) / values.length;
   return clamp(1 - meanDistance * 0.75, -1, 1);
 }
 
@@ -369,13 +401,26 @@ export function rankOutfits(args: {
   limit: number;
   stylePreferences?: StylePreferences | null;
 }): RecommendationResult[] {
-  const { dateKey, temperatureC, precipitationMm, tops, bottoms, shoes, wornItemIds, offset, limit, stylePreferences } = args;
+  const {
+    dateKey,
+    temperatureC,
+    precipitationMm,
+    tops,
+    bottoms,
+    shoes,
+    wornItemIds,
+    offset,
+    limit,
+    stylePreferences,
+  } = args;
   const isRaining = precipitationMm >= 0.1;
   const weights = getPersonalizedWeights(stylePreferences);
   const warmthBiasShift =
-    stylePreferences?.tempSensitivity === "cold" ? 1
-    : stylePreferences?.tempSensitivity === "warm" ? -1
-    : 0;
+    stylePreferences?.tempSensitivity === "cold"
+      ? 1
+      : stylePreferences?.tempSensitivity === "warm"
+        ? -1
+        : 0;
 
   if (offset < 0 || limit <= 0) return [];
   if (!tops.length || !bottoms.length || !shoes.length) return [];
@@ -483,10 +528,15 @@ export function rankOutfits(args: {
   return bestCandidates.slice(offset, offset + limit);
 }
 
-function explainColor(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function explainColor(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   const colors = [top.colorFamily, bottom.colorFamily, shoe.colorFamily];
   if (colors.every((value) => value === "UNKNOWN")) return null;
-  if (colors.includes("MULTI")) return "the multi-color piece is grounded by simpler supporting colors";
+  if (colors.includes("MULTI"))
+    return "the multi-color piece is grounded by simpler supporting colors";
   if (colors.filter((value) => value === "UNKNOWN").length > 0) return null;
   if (top.colorFamily === bottom.colorFamily || top.colorFamily === shoe.colorFamily) {
     return `the repeated ${top.colorFamily.toLowerCase()} tones keep the palette cohesive`;
@@ -497,7 +547,11 @@ function explainColor(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe:
   return "the colors complement each other without fighting for attention";
 }
 
-function explainStyle(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function explainStyle(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   const profiles = [top.styleProfile, bottom.styleProfile, shoe.styleProfile];
   if (profiles.every((value) => value === "UNKNOWN")) return null;
   if (profiles[0] === profiles[1] && profiles[1] === profiles[2] && profiles[0] !== "UNKNOWN") {
@@ -509,7 +563,11 @@ function explainStyle(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe:
   return null;
 }
 
-function explainPattern(top: ItemWithAttributes, bottom: ItemWithAttributes, shoe: ItemWithAttributes) {
+function explainPattern(
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
   const score = scorePatternBalance(top, bottom, shoe);
   if (score >= 0.7) return "one patterned piece stands out without making the outfit feel busy";
   if (score <= -0.3) return "the pattern mix is the weakest part of this look";
@@ -537,7 +595,11 @@ export function formatOutfitExplanation(args: {
             ? "mild"
             : "warm";
 
-  const reasons = [explainColor(top, bottom, shoe), explainStyle(top, bottom, shoe), explainPattern(top, bottom, shoe)]
+  const reasons = [
+    explainColor(top, bottom, shoe),
+    explainStyle(top, bottom, shoe),
+    explainPattern(top, bottom, shoe),
+  ]
     .filter((value): value is string => Boolean(value))
     .slice(0, 2);
 

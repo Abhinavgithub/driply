@@ -1,6 +1,7 @@
 import { InferenceClient } from "@huggingface/inference";
 
 import { getConfig, isEnabledFlag } from "@/lib/appConfig";
+import { getHfToken } from "@/lib/env";
 
 import { TryOnApiError } from "@/lib/gemini-tryon";
 import type { TryOnResult } from "@/lib/gemini-tryon";
@@ -21,11 +22,11 @@ export async function getTryOnProvider(): Promise<TryOnProvider> {
 }
 
 export async function isFluxTryOnEnabled(): Promise<boolean> {
-  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(process.env.HF_TOKEN?.trim());
+  return isEnabledFlag(await getConfig("ENABLE_AI_TRYON")) && Boolean(getHfToken());
 }
 
 export async function generateFluxTryOnImage(args: { prompt: string }): Promise<TryOnResult> {
-  const token = process.env.HF_TOKEN?.trim();
+  const token = getHfToken();
   if (!token) {
     throw new TryOnApiError("Missing HuggingFace token.", "MISSING_API_KEY");
   }
@@ -34,7 +35,9 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
 
   let blob: Blob;
   try {
-    const timer = setTimeout(() => { /* no-op; HF SDK has its own timeout */ }, FLUX_TIMEOUT_MS);
+    const timer = setTimeout(() => {
+      /* no-op; HF SDK has its own timeout */
+    }, FLUX_TIMEOUT_MS);
     try {
       blob = await client.textToImage(
         {
@@ -53,7 +56,11 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
       throw new TryOnApiError("FLUX request timed out.", "TIMEOUT");
     }
     const msg = error instanceof Error ? error.message : String(error);
-    const code = msg.includes("429") ? "RATE_LIMITED" : msg.includes("401") || msg.includes("403") ? "UNAUTHORIZED" : "UPSTREAM_ERROR";
+    const code = msg.includes("429")
+      ? "RATE_LIMITED"
+      : msg.includes("401") || msg.includes("403")
+        ? "UNAUTHORIZED"
+        : "UPSTREAM_ERROR";
     throw new TryOnApiError(`FLUX generation failed: ${msg}`, code);
   }
 

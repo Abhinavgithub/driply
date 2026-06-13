@@ -27,13 +27,7 @@ export const patterns = [
   "TEXTURED",
   "UNKNOWN",
 ] as const;
-export const styleProfiles = [
-  "CASUAL",
-  "SMART_CASUAL",
-  "ATHLEISURE",
-  "FORMAL",
-  "UNKNOWN",
-] as const;
+export const styleProfiles = ["CASUAL", "SMART_CASUAL", "ATHLEISURE", "FORMAL", "UNKNOWN"] as const;
 export const formalities = ["RELAXED", "ELEVATED", "DRESSY", "UNKNOWN"] as const;
 export const warmthLevels = ["LIGHT", "MID", "WARM", "UNKNOWN"] as const;
 
@@ -110,6 +104,9 @@ export function getDefaultSubtypeForKind(kind: ItemKindValue) {
   return itemSubtypeOptions[kind][0];
 }
 
-export function isValidSubtypeForKind(kind: ItemKindValue, subtype: string): subtype is ItemSubtypeValue {
+export function isValidSubtypeForKind(
+  kind: ItemKindValue,
+  subtype: string,
+): subtype is ItemSubtypeValue {
   return (itemSubtypeOptions[kind] as readonly string[]).includes(subtype);
 }

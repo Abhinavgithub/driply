@@ -27,11 +27,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-theme="dark" className={`h-full antialiased ${spaceGrotesk.variable} ${dmSans.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme="dark"
+      className={`h-full antialiased ${spaceGrotesk.variable} ${dmSans.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full">
-        <AppShell>
-          {children}
-        </AppShell>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

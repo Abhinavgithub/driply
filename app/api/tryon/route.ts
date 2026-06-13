@@ -29,9 +29,11 @@ export const POST = withAuth(
     const provider = await getTryOnProvider();
 
     const enabled =
-      provider === "flux"   ? await isFluxTryOnEnabled()   :
-      provider === "openai" ? await isOpenAITryOnEnabled()  :
-                              await isAiTryOnEnabled();
+      provider === "flux"
+        ? await isFluxTryOnEnabled()
+        : provider === "openai"
+          ? await isOpenAITryOnEnabled()
+          : await isAiTryOnEnabled();
     if (!enabled) {
       return NextResponse.json({ ok: false, reason: "tryon_disabled" });
     }
@@ -39,7 +41,10 @@ export const POST = withAuth(
     const json = await req.json().catch(() => null);
     const parsed = CreateSchema.safeParse(json);
     if (!parsed.success) {
-      return NextResponse.json({ error: "Expected topItemId, bottomItemId, shoeItemId." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Expected topItemId, bottomItemId, shoeItemId." },
+        { status: 400 },
+      );
     }
 
     const userId = currentUser.appUser.id;
@@ -125,7 +130,11 @@ export const GET = withAuth(
     }
 
     if (job.status === "FAILED") {
-      return NextResponse.json({ ok: false, status: "failed", reason: job.errorCode ?? "generation_failed" });
+      return NextResponse.json({
+        ok: false,
+        status: "failed",
+        reason: job.errorCode ?? "generation_failed",
+      });
     }
 
     // A worker that died mid-job leaves the row PENDING/RUNNING forever;
@@ -134,7 +143,10 @@ export const GET = withAuth(
       return NextResponse.json({ ok: false, status: "failed", reason: "timed_out" });
     }
 
-    return NextResponse.json({ ok: true, status: job.status === "RUNNING" ? "running" : "pending" });
+    return NextResponse.json({
+      ok: true,
+      status: job.status === "RUNNING" ? "running" : "pending",
+    });
   },
   { key: (u) => `tryon:get:${u.appUser.id}`, max: 60 },
 );

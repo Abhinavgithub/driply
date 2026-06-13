@@ -76,11 +76,7 @@ export default function ForgotPasswordPageClient() {
                 {error && <p className="lp-auth-error-msg">{error}</p>}
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="lp-auth-primary-btn"
-              >
+              <button type="submit" disabled={isLoading} className="lp-auth-primary-btn">
                 {isLoading ? "Sending…" : "Send reset link"}
               </button>
 

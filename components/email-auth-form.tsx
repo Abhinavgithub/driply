@@ -74,7 +74,7 @@ export function EmailAuthForm({ mode, nextPath, onError }: EmailAuthFormProps) {
         onChange={(e) => setEmail(e.target.value)}
         className="w-full rounded-xl border border-white/20 bg-transparent px-4 py-3 text-sm text-foreground focus:border-white/50 focus:outline-none"
       />
-      
+
       <input
         type="password"
         placeholder="Password"

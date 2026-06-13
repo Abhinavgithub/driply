@@ -10,19 +10,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpack flag, not Turbopack
 npm run build      # Production build
 npm run lint       # ESLint
+npm run format     # Prettier --write (format:check for CI-style verify)
 npx prisma migrate dev   # Run pending migrations (fails against Supabase — hand-author SQL + migrate deploy instead)
 npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs lint, `tsc --noEmit`, and the production build on PRs and pushes to main. Production Netlify deploys run `prisma migrate deploy` before the build (`[context.production]` in `netlify.toml`), so migrations reach production only via merge to main; deploy previews never touch the database.
+No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, and the production build on PRs and pushes to main. A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files). Production Netlify deploys run `prisma migrate deploy` before the build (`[context.production]` in `netlify.toml`), so migrations reach production only via merge to main; deploy previews never touch the database.
 
 ## Architecture
 
 Driply is a wardrobe assistant: users upload clothing photos, AI classifies them, and the app recommends daily outfits based on weather.
 
 **App Router layout** (`app/`):
-- `/today` — outfit recommendations (weather-aware) + AI try-on preview
+- `/today` — outfit recommendations (weather-aware) + AI try-on preview; the page is a thin orchestrator over `components/today/*` (mood banner, hero, score ring, stylist card, week history, location panel, …) and the `useRecommendations` hook
 - `/library` — wardrobe item browser
 - `/profile` — display name, profile picture (avatar), and AI try-on photo upload
 - `/onboarding` — 3-step wizard: style quiz → wardrobe upload → try-on photo (all optional/skippable)
@@ -56,8 +57,11 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `lib/style-dna.ts` / `lib/style-dna-prompt.ts` — Style DNA generation (`generateStyleDnaForUser()`, `getStyleDnaStatus()`); regeneration has a DB-backed 24h cooldown (`User.lastDnaRegenAt`)
 - `lib/recommendation.ts` — deterministic outfit scoring (weather 45%, color 20%, style 15%, formality 10%, pattern 5%, warmth 5%)
 - `lib/aiRecommendation.ts` — optional Gemini re-ranking on top of deterministic scores
+- `lib/env.ts` — centralized env-var getters + `validateEnv()`; called once at boot from `instrumentation.ts` so misconfigured deploys fail at start with the full list of missing vars. Read env through these getters, not `process.env`. `lib/supabase/env.ts` re-exports the Supabase getters for back-compat.
 - `lib/prisma.ts` — singleton Prisma client with `@prisma/adapter-pg`
 - `lib/supabase/` — server, browser, and admin Supabase clients (SSR via `@supabase/ssr`)
+- `lib/hooks/` — client hooks: `useApiFetch` (see fetch convention above), `useAuthUser` (Supabase auth state), `useGeolocation` (device coords with retry + eager prefetch), `useRecommendations` (`/today` outfit/location state machine)
+- `lib/types/wardrobe.ts` — shared client-side shapes of API responses (`WardrobeItem`, `RecommendationOption`, `ProfileResponse`, …); import these instead of re-declaring per page
 - `lib/item-media.ts` — Supabase Storage upload/delete/sign helpers for wardrobe item photos
 - `lib/profile-media.ts` — Storage helpers for profile photos; avatar at `profiles/{userId}/avatar.{ext}`, try-on at `profiles/{userId}/tryon.{ext}`; `downloadStorageObject()` for server-side byte downloads
 - `lib/openMeteo.ts` — weather data from Open-Meteo API

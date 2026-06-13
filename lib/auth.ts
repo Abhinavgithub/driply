@@ -61,7 +61,6 @@ export async function getCurrentUser() {
   // Upsert only when the row is missing (e.g. password sign-ins that never
   // pass through the callback).
   const appUser =
-    (await prisma.user.findUnique({ where: { id: user.id } })) ??
-    (await syncAuthUser(user));
+    (await prisma.user.findUnique({ where: { id: user.id } })) ?? (await syncAuthUser(user));
   return { authUser: user, appUser };
 }

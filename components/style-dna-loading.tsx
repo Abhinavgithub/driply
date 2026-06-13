@@ -124,11 +124,7 @@ export function StyleDnaLoading({ onContinue }: StyleDnaLoadingProps) {
           traits={dna.traits ?? []}
           colorPalette={dna.colorPalette ?? []}
         />
-        <button
-          type="button"
-          onClick={onContinue}
-          className="sdna-continue-btn"
-        >
+        <button type="button" onClick={onContinue} className="sdna-continue-btn">
           Continue to wardrobe →
         </button>
       </div>

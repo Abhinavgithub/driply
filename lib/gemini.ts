@@ -3,6 +3,7 @@ import type { ColorFamily, Formality, Pattern, StyleProfile, WarmthLevel } from 
 import { z } from "zod";
 
 import { getConfig } from "@/lib/appConfig";
+import { getGeminiApiKey } from "@/lib/env";
 
 import {
   colorFamilies,
@@ -124,10 +125,6 @@ function isEnabledFlag(value: string | undefined) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
-function getGeminiApiKey() {
-  return process.env.GEMINI_API_KEY?.trim() || "";
-}
-
 export async function isAiClassificationEnabled() {
   return isEnabledFlag(await getConfig("ENABLE_AI_CLASSIFICATION")) && Boolean(getGeminiApiKey());
 }
@@ -137,13 +134,15 @@ export async function isAiRecommenderEnabled() {
 }
 
 export async function getAiClassificationDisabledReason() {
-  if (!isEnabledFlag(await getConfig("ENABLE_AI_CLASSIFICATION"))) return "ENABLE_AI_CLASSIFICATION is not enabled";
+  if (!isEnabledFlag(await getConfig("ENABLE_AI_CLASSIFICATION")))
+    return "ENABLE_AI_CLASSIFICATION is not enabled";
   if (!getGeminiApiKey()) return "GEMINI_API_KEY is missing";
   return null;
 }
 
 export async function getAiRecommenderDisabledReason() {
-  if (!isEnabledFlag(await getConfig("ENABLE_AI_RECOMMENDER"))) return "ENABLE_AI_RECOMMENDER is not enabled";
+  if (!isEnabledFlag(await getConfig("ENABLE_AI_RECOMMENDER")))
+    return "ENABLE_AI_RECOMMENDER is not enabled";
   if (!getGeminiApiKey()) return "GEMINI_API_KEY is missing";
   return null;
 }
@@ -189,7 +188,11 @@ export function buildFallbackVisualSummary(args: {
   return parts.join(" ").slice(0, 80);
 }
 
-function logUsage(task: "classification" | "rerank", model: string, usageMetadata?: GeminiUsageMetadata) {
+function logUsage(
+  task: "classification" | "rerank",
+  model: string,
+  usageMetadata?: GeminiUsageMetadata,
+) {
   if (!usageMetadata) return;
   console.info(
     `[gemini:${task}]`,
@@ -212,7 +215,11 @@ function getTextResponse(json: GeminiApiResponse, task?: string) {
     throw new GeminiApiError("Gemini returned no text.", "EMPTY_RESPONSE");
   }
 
-  text = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").replace(/^```\s*/i, "").trim();
+  text = text
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .replace(/^```\s*/i, "")
+    .trim();
 
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
@@ -316,13 +323,17 @@ async function generateStructuredJson<T>(args: {
             : response.status >= 500
               ? "UPSTREAM_ERROR"
               : "BAD_REQUEST";
-    const err = new GeminiApiError(`Gemini request failed with ${response.status}.`, code, response.status);
+    const err = new GeminiApiError(
+      `Gemini request failed with ${response.status}.`,
+      code,
+      response.status,
+    );
 
     if (code !== "RATE_LIMITED") throw err;
     lastError = err;
   }
 
-  throw lastError!
+  throw lastError!;
 }
 
 async function toGeminiThumbnail(imageBytes: Buffer) {
@@ -365,7 +376,10 @@ export async function classifyWardrobeImage(args: {
         styleProfile: { type: "string", enum: styleProfiles },
         formality: { type: "string", enum: formalities },
         warmthLevel: { type: "string", enum: warmthLevels },
-        visualSummary: { type: ["string", "null"], description: "Short literal description. Max 12 words." },
+        visualSummary: {
+          type: ["string", "null"],
+          description: "Short literal description. Max 12 words.",
+        },
         confidence: { type: "number" },
       },
       required: [
@@ -458,7 +472,8 @@ export async function rerankOutfitCandidates(args: {
         },
         reason: {
           type: "string",
-          description: "Why this outfit works, written in a fun Gen-Z tone. 1 sentence, casual and punchy.",
+          description:
+            "Why this outfit works, written in a fun Gen-Z tone. 1 sentence, casual and punchy.",
         },
         confidence: { type: "number" },
       },
@@ -481,7 +496,8 @@ export async function rerankOutfitCandidates(args: {
                   args.candidates[1]?.candidateId || "ID_2",
                   args.candidates[2]?.candidateId || "ID_3",
                 ],
-                reason: "This fit is giving effortless — the colors just work and it's lowkey perfect for the weather.",
+                reason:
+                  "This fit is giving effortless — the colors just work and it's lowkey perfect for the weather.",
                 confidence: 0.85,
               })}`,
           },

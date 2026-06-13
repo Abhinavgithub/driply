@@ -2,11 +2,16 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "i
 
 export function mimeToExt(mimeType: string): string | null {
   switch (mimeType) {
-    case "image/jpeg": return "jpg";
-    case "image/png": return "png";
-    case "image/webp": return "webp";
-    case "image/gif": return "gif";
-    default: return null;
+    case "image/jpeg":
+      return "jpg";
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      return null;
   }
 }
 
@@ -27,9 +32,16 @@ function detectImageMime(buf: Buffer): string | null {
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
   if (
     buf.length >= 12 &&
-    buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
-    buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
-  ) return "image/webp";
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x45 &&
+    buf[10] === 0x42 &&
+    buf[11] === 0x50
+  )
+    return "image/webp";
   if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return "image/gif";
   return null;
 }
@@ -77,6 +89,6 @@ export function validateImageMime(bytes: Buffer, declaredType: string): string |
   if (!ALLOWED_IMAGE_TYPES.has(declaredType)) return null;
   const detected = detectImageMime(bytes);
   if (detected === null) return declaredType; // inconclusive — trust allowlisted declared type
-  if (detected !== declaredType) return null;  // bytes say one thing, declared type says another
+  if (detected !== declaredType) return null; // bytes say one thing, declared type says another
   return detected;
 }

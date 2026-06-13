@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { parseStylePreferences } from "@/lib/style-preferences";
+import { getGeminiApiKey } from "@/lib/env";
 import {
   buildRuleBasedDna,
   buildStyleDnaTextPrompt,
@@ -15,9 +16,7 @@ const dnaTextSchema = z.object({
   archetypeName: z.string().trim().min(1).max(40),
   description: z.string().trim().min(1).max(300),
   traits: z.array(z.string().trim().max(20)).min(3).max(5),
-  colorPalette: z
-    .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
-    .length(5),
+  colorPalette: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).length(5),
   imagePromptHints: z.array(z.string().trim().max(60)).min(3).max(5),
 });
 
@@ -63,7 +62,7 @@ async function computeWardrobeSummary(userId: string): Promise<WardrobeSummary |
 }
 
 async function generateDnaTextWithGemini(prompt: string): Promise<StyleDnaText> {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = getGeminiApiKey();
   if (!apiKey) throw new Error("Missing Gemini API key");
 
   const response = await fetch(
@@ -95,8 +94,15 @@ async function generateDnaTextWithGemini(prompt: string): Promise<StyleDnaText> 
 
   type GeminiResponse = { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const json = (await response.json()) as GeminiResponse;
-  let text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("").trim() ?? "";
-  text = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  let text =
+    json.candidates?.[0]?.content?.parts
+      ?.map((p) => p.text ?? "")
+      .join("")
+      .trim() ?? "";
+  text = text
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
   const first = text.indexOf("{");
   const last = text.lastIndexOf("}");
   if (first !== -1 && last !== -1) text = text.slice(first, last + 1);

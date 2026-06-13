@@ -54,7 +54,7 @@ export async function applyAiRecommendationRerank(args: {
 }) {
   const { temperatureC, precipitationMm, rankedOptions } = args;
 
-  if (!await isAiRecommenderEnabled()) {
+  if (!(await isAiRecommenderEnabled())) {
     console.info("[gemini:rerank] fallback", {
       reason: await getAiRecommenderDisabledReason(),
       candidateCount: rankedOptions.length,
@@ -101,10 +101,7 @@ export async function applyAiRecommendationRerank(args: {
       })),
     });
 
-    if (
-      reranked.confidence < MIN_AI_CONFIDENCE ||
-      !shortlistById.has(reranked.chosenCandidateId)
-    ) {
+    if (reranked.confidence < MIN_AI_CONFIDENCE || !shortlistById.has(reranked.chosenCandidateId)) {
       console.info("[gemini:rerank] fallback", {
         reason:
           reranked.confidence < MIN_AI_CONFIDENCE
@@ -125,8 +122,13 @@ export async function applyAiRecommendationRerank(args: {
 
     const orderedCandidateIds = [
       reranked.chosenCandidateId,
-      ...reranked.orderedCandidateIds.filter((candidateId) => candidateId !== reranked.chosenCandidateId),
-    ].filter((candidateId, index, all) => shortlistById.has(candidateId) && all.indexOf(candidateId) === index);
+      ...reranked.orderedCandidateIds.filter(
+        (candidateId) => candidateId !== reranked.chosenCandidateId,
+      ),
+    ].filter(
+      (candidateId, index, all) =>
+        shortlistById.has(candidateId) && all.indexOf(candidateId) === index,
+    );
 
     const rerankedShortlist: RecommendationResult[] = [];
     for (const candidateId of orderedCandidateIds) {
