@@ -16,7 +16,9 @@ npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, and the production build on PRs and pushes to main. A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files). Production Netlify deploys run `prisma migrate deploy` before the build (`[context.production]` in `netlify.toml`), so migrations reach production only via merge to main; deploy previews never touch the database.
+No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, and the production build on PRs and pushes to main. A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files).
+
+**Migrations are applied manually**, not during deploy: the Netlify build runner (and GitHub-hosted runners) are IPv4-only and cannot reach Supabase's direct connection host (`db.<ref>.supabase.co:5432`, IPv6-only on current Supabase plans), so `prisma migrate deploy` fails there with P1001. After a PR with a migration merges, run `npx prisma migrate deploy` from a machine that can reach the DB (the pooler `DATABASE_URL` is IPv4-reachable but the transaction pooler can't run migrations; use the direct `DIRECT_URL` from such a machine, or the Supabase session pooler).
 
 ## Architecture
 
