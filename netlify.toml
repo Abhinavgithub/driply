@@ -1,14 +1,12 @@
 [build]
   command = "npm run build"
 
-# Production deploys apply pending migrations before building, so a schema
-# change goes live in the same deploy as the code that needs it — and only
-# after its PR is merged to main. Deploy previews and branch deploys use the
-# default command above and never touch the database. Requires DIRECT_URL in
-# the Netlify build environment; a migration failure fails the deploy (the
-# old code keeps serving).
-[context.production]
-  command = "npx prisma migrate deploy && npm run build"
+# NOTE: migrations are NOT run during the Netlify build. The build runner is
+# IPv4-only and cannot reach Supabase's direct connection host
+# (db.<ref>.supabase.co:5432, IPv6-only on current Supabase plans), so
+# `prisma migrate deploy` here fails with P1001. Apply migrations with
+# `npx prisma migrate deploy` from a machine/CI that can reach the DB after a
+# PR merges (see CLAUDE.md "Prisma migration workflow").
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
