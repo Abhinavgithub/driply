@@ -10,13 +10,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpack flag, not Turbopack
 npm run build      # Production build
 npm run lint       # ESLint
+npm test           # Vitest (run once); test:watch for watch mode
 npm run format     # Prettier --write (format:check for CI-style verify)
 npx prisma migrate dev   # Run pending migrations (fails against Supabase — hand-author SQL + migrate deploy instead)
 npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-No test suite is configured. `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, and the production build on PRs and pushes to main. A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files).
+Tests use **Vitest** (`*.test.ts` colocated under `lib/`); current coverage is the pure logic — `lib/recommendation.ts` (scoring/weights/penalties/pagination) and `lib/itemAttributes.ts` (Zod schemas + helpers). `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, `npm test`, and the production build on PRs and pushes to main. A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files).
 
 **Migrations are applied manually**, not during deploy: the Netlify build runner (and GitHub-hosted runners) are IPv4-only and cannot reach Supabase's direct connection host (`db.<ref>.supabase.co:5432`, IPv6-only on current Supabase plans), so `prisma migrate deploy` fails there with P1001. After a PR with a migration merges, run `npx prisma migrate deploy` from a machine that can reach the DB (the pooler `DATABASE_URL` is IPv4-reachable but the transaction pooler can't run migrations; use the direct `DIRECT_URL` from such a machine, or the Supabase session pooler).
 
