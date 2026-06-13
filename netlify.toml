@@ -1,8 +1,14 @@
 [build]
-  # verify:css fails the deploy if the built CSS bundle dropped any styles
-  # (this build environment silently truncated globals.css before — see
-  # scripts/verify-built-css.mjs), so broken styling can never ship.
-  command = "npm run build && npm run verify:css"
+  # `rm -rf .next/cache` clears the Next.js build cache before each build. The
+  # production build context had a corrupted/stale cache that silently
+  # truncated the emitted CSS bundle (dropping the Style DNA styles) and froze
+  # the deployed serverless functions — a clean build (CI + deploy previews)
+  # always produces correct output. This is the in-repo equivalent of
+  # Netlify's "Clear cache and deploy site".
+  #
+  # verify:css then fails the deploy if the built CSS bundle still dropped any
+  # styles (see scripts/verify-built-css.mjs), so broken styling can never ship.
+  command = "rm -rf .next/cache && npm run build && npm run verify:css"
 
 # NOTE: migrations are NOT run during the Netlify build. The build runner is
 # IPv4-only and cannot reach Supabase's direct connection host
