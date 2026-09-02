@@ -7,8 +7,17 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const { validateEnv } = await import("@/lib/env");
-  const { warnings } = validateEnv();
-  for (const warning of warnings) {
-    console.warn(`[env] ${warning}`);
+  try {
+    const { warnings } = validateEnv();
+    for (const warning of warnings) {
+      console.warn(`[env] ${warning}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[env] ${message}`);
+    if (process.env.NODE_ENV === "production") throw err;
+    for (const line of message.split("\n")) {
+      console.warn(`[env] ${line}`);
+    }
   }
 }

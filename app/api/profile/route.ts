@@ -132,6 +132,12 @@ export const PATCH = withAuth(
 
     // Handle style preferences
     if (typeof rawStylePreferences === "string") {
+      if (rawStylePreferences.length > 10 * 1024) {
+        return NextResponse.json(
+          { error: "Style preferences payload too large." },
+          { status: 413 },
+        );
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(rawStylePreferences);
