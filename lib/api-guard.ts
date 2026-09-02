@@ -6,14 +6,64 @@ import { getAppUrl } from "@/lib/env";
 
 export const MAX_JSON_BODY_BYTES = 100 * 1024; // 100 KB for JSON payloads
 
+async function readBodyWithByteLimit(
+  req: NextRequest,
+  limit: number,
+): Promise<{ text: string; tooLarge: boolean }> {
+  const body = req.body;
+  if (!body) return { text: "", tooLarge: false };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > limit) {
+          try {
+            await reader.cancel();
+          } catch {}
+          return { text: "", tooLarge: true };
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+  if (chunks.length === 0) return { text: "", tooLarge: false };
+  const concat = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    concat.set(c, off);
+    off += c.byteLength;
+  }
+  return { text: new TextDecoder().decode(concat), tooLarge: false };
+}
+
 export async function readLimitedJson(req: NextRequest, limit = MAX_JSON_BODY_BYTES) {
   const contentLength = req.headers.get("content-length");
   if (contentLength && Number(contentLength) > limit) {
     throw new Error(`Payload too large: ${contentLength} > ${limit}`);
   }
+  // If no Content-Length, enforce byte limit by streaming to avoid buffering unbounded bodies.
+  if (!contentLength) {
+    const { text, tooLarge } = await readBodyWithByteLimit(req, limit);
+    if (tooLarge) throw new Error(`Payload too large: > ${limit} bytes`);
+    if (!text) return null;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  }
   const text = await req.text();
-  if (text.length > limit) {
-    throw new Error(`Payload too large: ${text.length} > ${limit}`);
+  if (new TextEncoder().encode(text).byteLength > limit) {
+    throw new Error(`Payload too large: > ${limit} bytes`);
   }
   if (!text) return null;
   try {
@@ -93,22 +143,35 @@ export function withAuth(
       if (lenHeader && Number(lenHeader) > MAX_JSON_BODY_BYTES) {
         return NextResponse.json({ error: "Payload too large." }, { status: 413 });
       }
-      // No (or small) Content-Length — read the actual body and enforce the limit.
-      // Use clone so original is consumed but we can recreate a request for the handler.
-      let bodyText = "";
-      try {
-        bodyText = await req.text();
-      } catch {
-        return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+      // Enforce actual byte size for chunked/missing Content-Length by streaming with a cap.
+      // Prevents buffering multi-MB bodies via req.text() before the check (P1) and counts UTF-8 bytes (P2).
+      let bodyText: string;
+      if (!lenHeader) {
+        let tooLarge = false;
+        try {
+          const res = await readBodyWithByteLimit(req, MAX_JSON_BODY_BYTES);
+          tooLarge = res.tooLarge;
+          bodyText = res.text;
+        } catch {
+          return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+        }
+        if (tooLarge) {
+          return NextResponse.json({ error: "Payload too large." }, { status: 413 });
+        }
+      } else {
+        try {
+          bodyText = await req.text();
+        } catch {
+          return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+        }
+        if (new TextEncoder().encode(bodyText).byteLength > MAX_JSON_BODY_BYTES) {
+          return NextResponse.json({ error: "Payload too large." }, { status: 413 });
+        }
       }
-      if (bodyText.length > MAX_JSON_BODY_BYTES) {
-        return NextResponse.json({ error: "Payload too large." }, { status: 413 });
-      }
-      // Re-create the request with the buffered body so handler's req.json() still works.
       const forwarded = new NextRequest(req.url, {
         method: req.method,
         headers: req.headers,
-        body: bodyText || undefined,
+        body: bodyText! || undefined,
       });
       return handler(user, forwarded);
     }
