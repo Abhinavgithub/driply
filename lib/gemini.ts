@@ -227,7 +227,9 @@ function getTextResponse(json: GeminiApiResponse, task?: string) {
     text = text.slice(firstBrace, lastBrace + 1);
   }
 
-  console.info(`[gemini:${task ?? "unknown"}] raw_response:`, text.slice(0, 500));
+  if (process.env.DEBUG_GEMINI === "1" || process.env.NODE_ENV !== "production") {
+    console.info(`[gemini:${task ?? "unknown"}] raw_response:`, text.slice(0, 500));
+  }
 
   return text;
 }

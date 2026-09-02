@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ImgHTMLAttributes } from "react";
 
+import { isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 
 type ItemImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError"> & {
@@ -34,7 +35,8 @@ export function ItemImage({ itemId, src, alt, loading, ...imgProps }: ItemImageP
         const fresh = data.items?.find((item) => item.id === itemId)?.photoUrl;
         if (fresh) setRefreshed({ forSrc: src, url: fresh });
       })
-      .catch(() => {
+      .catch((e: unknown) => {
+        if (isHandledFetchError(e)) return;
         // Image stays broken; nothing more we can do client-side.
       });
   }

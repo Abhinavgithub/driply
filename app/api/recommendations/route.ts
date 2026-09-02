@@ -41,6 +41,11 @@ export const GET = withAuth(
 
     const { lat, lon, date, offset, limit } = parsed.data;
     const dateKey = date ?? getServerDateKey();
+    if (!date) {
+      console.warn(
+        "[recommendations] missing date param, falling back to server date (deprecated)",
+      );
+    }
     const stylePreferences = parseStylePreferences(currentUser.appUser.stylePreferences);
 
     const todayStart = dateKeyToUtcStart(dateKey);

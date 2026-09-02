@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { fetchWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
 import { getServerDateKey, dateKeyToUtcStart } from "@/lib/date-utils";
+import { getAppUrl } from "@/lib/env";
 
 const QuerySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -24,11 +25,24 @@ export async function GET(req: NextRequest) {
   if (!currentUser) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+  // CSRF check parity with withAuth (legacy route doesn't use withAuth)
+  const origin = req.headers.get("origin");
+  if (origin) {
+    try {
+      if (new URL(origin).origin !== new URL(getAppUrl()).origin) {
+        return NextResponse.json({ error: "Forbidden: invalid origin." }, { status: 403 });
+      }
+    } catch {
+      // ignore malformed origin
+    }
+  }
   if (!(await checkRateLimit(currentUser.appUser.id, 20))) {
-    return NextResponse.json(
+    const res = NextResponse.json(
       { error: "Too many requests. Try again in a minute." },
       { status: 429 },
     );
+    res.headers.set("Retry-After", "60");
+    return res;
   }
 
   const { searchParams } = new URL(req.url);
@@ -47,6 +61,9 @@ export async function GET(req: NextRequest) {
 
   const { lat, lon, date } = parsed.data;
   const dateKey = date ?? getServerDateKey();
+  if (!date) {
+    console.warn("[recommendation] missing date param, falling back to server date (deprecated)");
+  }
 
   const [tops, bottoms, shoes] = await Promise.all([
     prisma.item.findMany({
@@ -86,7 +103,7 @@ export async function GET(req: NextRequest) {
 
   const todayStart = dateKeyToUtcStart(dateKey);
   const cutoff = new Date(todayStart);
-  cutoff.setUTCDate(cutoff.getUTCDate() - 3);
+  cutoff.setUTCDate(cutoff.getUTCDate() - 7);
 
   const recent = await prisma.outfitHistory.findMany({
     where: {

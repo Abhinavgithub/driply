@@ -110,10 +110,12 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
             "saved",
             formatLocationLabel(storedLocation),
           );
+          setLocationError(null);
           setLoading(false);
           return;
         } catch (fallbackError) {
           if (isHandledFetchError(fallbackError)) return;
+          setLocationError(null);
           setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
         }
       }

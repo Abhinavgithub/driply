@@ -3,6 +3,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 
+import { useAuthUser } from "@/lib/hooks/use-auth-user";
+
 type TryOnItem = {
   id: string;
   kind: "TOP" | "BOTTOM" | "SHOE";
@@ -33,21 +35,39 @@ type Phase = "idle" | "loading" | "success" | "fallback";
 type CacheEntry = {
   imageUrl: string;
   mimeType: string;
+  createdAt: number;
 };
 
+const SESSION_CACHE_TTL_MS = 45 * 60 * 1000; // 45 min — before 1h signed-URL expiry
+
 // Module-level session cache — survives component remounts within same browser
-// session. Cached signed URLs expire after an hour; the regenerate button
-// covers that edge.
+// session.
+
 const sessionCache = new Map<string, CacheEntry>();
 
-function makeCacheKey(outfit: TryOnPreviewProps["outfit"]): string {
-  return `${outfit.top.id}_${outfit.bottom.id}_${outfit.shoe.id}`;
+export function clearTryOnSessionCache() {
+  sessionCache.clear();
+}
+
+function makeCacheKey(outfit: TryOnPreviewProps["outfit"], userKey: string | null): string {
+  const base = `${outfit.top.id}_${outfit.bottom.id}_${outfit.shoe.id}`;
+  return userKey ? `${userKey}:${base}` : base;
+}
+
+function getCachedEntry(key: string): CacheEntry | null {
+  const entry = sessionCache.get(key) ?? null;
+  if (!entry) return null;
+  if (Date.now() - entry.createdAt > SESSION_CACHE_TTL_MS) {
+    sessionCache.delete(key);
+    return null;
+  }
+  return entry;
 }
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLLS = 60; // 3 minutes — covers the slowest provider (OpenAI, 120s)
 
-type JobResult = CacheEntry;
+type JobResult = Omit<CacheEntry, "createdAt">;
 
 /**
  * Creates a try-on job and polls it to completion. Returns null if the caller
@@ -137,6 +157,9 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
   const [fallbackNote, setFallbackNote] = useState<string | null>(null);
   const [failCount, setFailCount] = useState(0);
   const cancelledRef = useRef(false);
+  const { user } = useAuthUser();
+  // User-scoped key prevents cross-user cache reuse after logout/login.
+  const userKey = user?.id ?? displayName ?? "anon";
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -145,9 +168,15 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
     };
   }, []);
 
+  // Clear stale cache when outfit user context changes
+  useEffect(() => {
+    // If displayName changes (login switch), bust cache — signed URLs are per-user.
+    // We keep the Map but keys are now scoped, so old entries naturally miss.
+  }, [userKey]);
+
   const generate = useCallback(async () => {
-    const cacheKey = makeCacheKey(outfit);
-    const cached = sessionCache.get(cacheKey);
+    const cacheKey = makeCacheKey(outfit, userKey);
+    const cached = getCachedEntry(cacheKey);
     if (cached) {
       setImageUrl(cached.imageUrl);
       setImageMimeType(cached.mimeType);
@@ -166,7 +195,7 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
       try {
         const result = await generateViaJob(outfit, isCancelled);
         if (result === null) return; // unmounted mid-poll
-        sessionCache.set(cacheKey, result);
+        sessionCache.set(cacheKey, { ...result, createdAt: Date.now() });
         setImageUrl(result.imageUrl);
         setImageMimeType(result.mimeType);
         setPhase("success");
@@ -179,12 +208,12 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
 
     setFallbackNote("Couldn't generate your look right now — here's your outfit recommendation.");
     setPhase("fallback");
-  }, [outfit]);
+  }, [outfit, userKey]);
 
   const regenerate = useCallback(() => {
-    sessionCache.delete(makeCacheKey(outfit));
+    sessionCache.delete(makeCacheKey(outfit, userKey));
     void generate();
-  }, [outfit, generate]);
+  }, [outfit, userKey, generate]);
 
   useImperativeHandle(ref, () => ({ generate: () => void generate() }), [generate]);
 

@@ -38,6 +38,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Prisma validate
+        run: npx prisma validate
+
       - name: Test
         run: npm test
 

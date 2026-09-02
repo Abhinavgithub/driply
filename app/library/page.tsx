@@ -291,8 +291,17 @@ export default function LibraryPage() {
         </div>
 
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload wardrobe photos"
           className={`upload-dropzone${dragOver ? " drag-over" : ""}`}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
