@@ -132,13 +132,14 @@ export function withAuth(
       res.headers.set("Vary", "Origin");
       return res;
     }
-    // JSON body size guard (M4): enforce actual bytes, not just Content-Length header.
-    // Handles chunked encoding without Content-Length by reading the body with a limit.
-    const contentType = req.headers.get("content-type") ?? "";
-    const isJsonMethod =
-      contentType.includes("application/json") &&
-      ["POST", "PATCH", "PUT", "DELETE"].includes(req.method);
-    if (isJsonMethod) {
+    // Body size guard (M4): enforce actual bytes for all non-multipart state-changing requests,
+    // independent of Content-Type. Handlers call req.json() regardless of header (text/plain bypass),
+    // and case variants like Application/JSON must also be capped. Multipart is excluded (10MB file uploads).
+    const rawContentType = req.headers.get("content-type") ?? "";
+    const contentType = rawContentType.toLowerCase();
+    const isMultipart = contentType.includes("multipart/form-data");
+    const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(req.method);
+    if (isStateChanging && !isMultipart) {
       const lenHeader = req.headers.get("content-length");
       if (lenHeader && Number(lenHeader) > MAX_JSON_BODY_BYTES) {
         return NextResponse.json({ error: "Payload too large." }, { status: 413 });
