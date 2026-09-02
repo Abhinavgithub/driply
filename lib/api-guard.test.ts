@@ -16,7 +16,12 @@ vi.mock("@/lib/env", () => ({
 
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { withAuth, MAX_JSON_BODY_BYTES, MAX_MULTIPART_BODY_BYTES } from "@/lib/api-guard";
+import {
+  withAuth,
+  MAX_JSON_BODY_BYTES,
+  MAX_ITEMS_MULTIPART_BYTES,
+  MAX_PROFILE_MULTIPART_BYTES,
+} from "@/lib/api-guard";
 
 const mockUser = {
   appUser: { id: "user-1", stylePreferences: null },
@@ -325,10 +330,10 @@ describe("withAuth body cap", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("caps oversized multipart upload (chunked, no Content-Length) at 15MB", async () => {
+  it("caps oversized multipart upload to /api/items (chunked, no Content-Length) at 55MB", async () => {
     const handler = makeHandler();
     const guarded = withAuth(handler);
-    const huge = "a".repeat(MAX_MULTIPART_BODY_BYTES + 1);
+    const huge = "a".repeat(MAX_ITEMS_MULTIPART_BYTES + 1);
     const req = makeRequest(
       "http://localhost:3000/api/items",
       "POST",
@@ -344,7 +349,7 @@ describe("withAuth body cap", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("caps multipart upload via Content-Length fast-path at 15MB", async () => {
+  it("caps multipart upload to /api/profile via Content-Length fast-path at 22MB", async () => {
     const handler = makeHandler();
     const guarded = withAuth(handler);
     const body = "a".repeat(100);
@@ -353,7 +358,7 @@ describe("withAuth body cap", () => {
       "PATCH",
       {
         "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
-        "content-length": String(MAX_MULTIPART_BODY_BYTES + 1),
+        "content-length": String(MAX_PROFILE_MULTIPART_BYTES + 1),
       },
       body,
     );
@@ -363,14 +368,16 @@ describe("withAuth body cap", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("allows multipart upload under 15MB (chunked, handler can parse formData)", async () => {
+  it("allows multipart upload under per-route limit (2×8MB batch to /api/items, avatar+try-on to /api/profile)", async () => {
     const handler = vi.fn(async () => {
       const { NextResponse } = await import("next/server");
       return NextResponse.json({ ok: true }, { status: 200 });
     });
     const guarded = withAuth(handler);
-    const body = "a".repeat(1024 * 1024); // 1MB multipart
-    const req = makeRequest(
+    // 2×8MB =16MB <55MB and <22MB per-route limits, previously 413 at shared 15MB
+    const twoByEight = "a".repeat(8 * 1024 * 1024);
+    const body = twoByEight + twoByEight;
+    const reqItems = makeRequest(
       "http://localhost:3000/api/items",
       "POST",
       {
@@ -378,10 +385,24 @@ describe("withAuth body cap", () => {
       },
       body,
     );
-    req.headers.delete("content-length");
+    reqItems.headers.delete("content-length");
+    const resItems = await guarded(reqItems);
+    expect(resItems.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
 
-    const res = await guarded(req);
-    expect(res.status).toBe(200);
+    handler.mockClear();
+    const reqProfile = makeRequest(
+      "http://localhost:3000/api/profile",
+      "PATCH",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+    reqProfile.headers.delete("content-length");
+    const guarded2 = withAuth(handler);
+    const resProfile = await guarded2(reqProfile);
+    expect(resProfile.status).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
   });
 });
