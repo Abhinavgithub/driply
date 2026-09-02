@@ -16,7 +16,7 @@ vi.mock("@/lib/env", () => ({
 
 import { getCurrentUser } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { withAuth, MAX_JSON_BODY_BYTES } from "@/lib/api-guard";
+import { withAuth, MAX_JSON_BODY_BYTES, MAX_MULTIPART_BODY_BYTES } from "@/lib/api-guard";
 
 const mockUser = {
   appUser: { id: "user-1", stylePreferences: null },
@@ -323,5 +323,65 @@ describe("withAuth body cap", () => {
     const res = await guarded(req);
     expect(res.status).toBe(413);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("caps oversized multipart upload (chunked, no Content-Length) at 15MB", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const huge = "a".repeat(MAX_MULTIPART_BODY_BYTES + 1);
+    const req = makeRequest(
+      "http://localhost:3000/api/items",
+      "POST",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      huge,
+    );
+    req.headers.delete("content-length");
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("caps multipart upload via Content-Length fast-path at 15MB", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const body = "a".repeat(100);
+    const req = makeRequest(
+      "http://localhost:3000/api/profile",
+      "PATCH",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+        "content-length": String(MAX_MULTIPART_BODY_BYTES + 1),
+      },
+      body,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("allows multipart upload under 15MB (chunked, handler can parse formData)", async () => {
+    const handler = vi.fn(async () => {
+      const { NextResponse } = await import("next/server");
+      return NextResponse.json({ ok: true }, { status: 200 });
+    });
+    const guarded = withAuth(handler);
+    const body = "a".repeat(1024 * 1024); // 1MB multipart
+    const req = makeRequest(
+      "http://localhost:3000/api/items",
+      "POST",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+    req.headers.delete("content-length");
+
+    const res = await guarded(req);
+    expect(res.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
   });
 });

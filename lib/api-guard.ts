@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { getAppUrl } from "@/lib/env";
 
 export const MAX_JSON_BODY_BYTES = 100 * 1024; // 100 KB for JSON payloads
+export const MAX_MULTIPART_BODY_BYTES = 15 * 1024 * 1024; // 15 MB for multipart uploads (10MB file + overhead)
 
 async function readBodyWithByteLimit(
   req: NextRequest,
@@ -43,6 +44,45 @@ async function readBodyWithByteLimit(
     off += c.byteLength;
   }
   return { text: new TextDecoder().decode(concat), tooLarge: false };
+}
+
+async function readRawBodyWithByteLimit(
+  req: NextRequest,
+  limit: number,
+): Promise<{ bytes: Uint8Array | null; tooLarge: boolean }> {
+  const body = req.body;
+  if (!body) return { bytes: null, tooLarge: false };
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        total += value.byteLength;
+        if (total > limit) {
+          try {
+            await reader.cancel();
+          } catch {}
+          return { bytes: null, tooLarge: true };
+        }
+        chunks.push(value);
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {}
+  }
+  if (chunks.length === 0) return { bytes: null, tooLarge: false };
+  const concat = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    concat.set(c, off);
+    off += c.byteLength;
+  }
+  return { bytes: concat, tooLarge: false };
 }
 
 export async function readLimitedJson(req: NextRequest, limit = MAX_JSON_BODY_BYTES) {
@@ -145,6 +185,29 @@ export function withAuth(
     const MULTIPART_UPLOAD_ROUTES = new Set<string>(["POST /api/items", "PATCH /api/profile"]);
     const routeKey = `${req.method} ${pathname}`;
     const isUploadRoute = isMultipart && MULTIPART_UPLOAD_ROUTES.has(routeKey);
+    // Multipart upload routes: cap total envelope before req.formData() parses it
+    if (isUploadRoute) {
+      const lenHeader = req.headers.get("content-length");
+      if (lenHeader && Number(lenHeader) > MAX_MULTIPART_BODY_BYTES) {
+        return NextResponse.json({ error: "Payload too large." }, { status: 413 });
+      }
+      // Enforce actual byte size via streaming (handles missing or lying Content-Length)
+      if (req.body) {
+        const { bytes, tooLarge } = await readRawBodyWithByteLimit(req, MAX_MULTIPART_BODY_BYTES);
+        if (tooLarge) {
+          return NextResponse.json({ error: "Payload too large." }, { status: 413 });
+        }
+        if (bytes) {
+          const forwarded = new NextRequest(req.url, {
+            method: req.method,
+            headers: req.headers,
+            body: bytes as unknown as BodyInit,
+          });
+          return handler(user, forwarded);
+        }
+      }
+      return handler(user, req);
+    }
     if (isStateChanging && !isUploadRoute) {
       const lenHeader = req.headers.get("content-length");
       if (lenHeader && Number(lenHeader) > MAX_JSON_BODY_BYTES) {
