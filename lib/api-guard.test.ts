@@ -172,10 +172,10 @@ describe("withAuth body cap", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("does not cap multipart/form-data (photo uploads allowed)", async () => {
+  it("does not cap multipart/form-data for upload routes (photo uploads allowed)", async () => {
     const handler = makeHandler();
     const guarded = withAuth(handler);
-    // Simulate large multipart body >100KB but should not be capped at 100KB
+    // Upload route /api/items with multipart should not be capped at 100KB
     const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
     const req = makeRequest(
       "http://localhost:3000/api/items",
@@ -187,9 +187,47 @@ describe("withAuth body cap", () => {
     );
 
     const res = await guarded(req);
-    // Handler is called because multipart is excluded from cap
     expect(res.status).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("caps multipart/form-data spoof to JSON routes (P1 header-spoof)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    // JSON route /api/outfits with multipart header and large JSON body should be capped
+    const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
+    const body = JSON.stringify({ data: large });
+    const req = makeRequest(
+      "http://localhost:3000/api/outfits",
+      "POST",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("caps multipart spoof to /api/tryon as well", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
+    const body = JSON.stringify({ data: large });
+    const req = makeRequest(
+      "http://localhost:3000/api/tryon",
+      "POST",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it("forwards valid JSON correctly under limit (handler can parse)", async () => {

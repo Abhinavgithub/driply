@@ -134,12 +134,17 @@ export function withAuth(
     }
     // Body size guard (M4): enforce actual bytes for all non-multipart state-changing requests,
     // independent of Content-Type. Handlers call req.json() regardless of header (text/plain bypass),
-    // and case variants like Application/JSON must also be capped. Multipart is excluded (10MB file uploads).
+    // and case variants like Application/JSON must also be capped. Multipart is allowed only for
+    // upload routes (photo uploads, 10MB per file via validateImageBlob).
     const rawContentType = req.headers.get("content-type") ?? "";
     const contentType = rawContentType.toLowerCase();
     const isMultipart = contentType.includes("multipart/form-data");
     const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(req.method);
-    if (isStateChanging && !isMultipart) {
+    const pathname = ((req as unknown as { nextUrl?: { pathname: string } }).nextUrl?.pathname ??
+      new URL(req.url).pathname) as string;
+    const MULTIPART_ROUTES = new Set<string>(["/api/items", "/api/profile"]);
+    const isUploadRoute = isMultipart && MULTIPART_ROUTES.has(pathname);
+    if (isStateChanging && !isUploadRoute) {
       const lenHeader = req.headers.get("content-length");
       if (lenHeader && Number(lenHeader) > MAX_JSON_BODY_BYTES) {
         return NextResponse.json({ error: "Payload too large." }, { status: 413 });
