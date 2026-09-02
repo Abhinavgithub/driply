@@ -172,14 +172,69 @@ describe("withAuth body cap", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it("does not cap multipart/form-data for upload routes (photo uploads allowed)", async () => {
+  it("does not cap multipart/form-data for POST /api/items (photo upload)", async () => {
     const handler = makeHandler();
     const guarded = withAuth(handler);
-    // Upload route /api/items with multipart should not be capped at 100KB
     const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
     const req = makeRequest(
       "http://localhost:3000/api/items",
       "POST",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      large,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("caps multipart/form-data for DELETE /api/items (JSON route, not upload)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
+    const body = JSON.stringify({ itemId: large });
+    const req = makeRequest(
+      "http://localhost:3000/api/items",
+      "DELETE",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("caps multipart/form-data for PATCH /api/items (JSON route, not upload)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
+    const body = JSON.stringify({ itemId: "x", colorFamily: large });
+    const req = makeRequest(
+      "http://localhost:3000/api/items",
+      "PATCH",
+      {
+        "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
+      },
+      body,
+    );
+
+    const res = await guarded(req);
+    expect(res.status).toBe(413);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not cap multipart for PATCH /api/profile (profile upload)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const large = "a".repeat(MAX_JSON_BODY_BYTES + 5000);
+    const req = makeRequest(
+      "http://localhost:3000/api/profile",
+      "PATCH",
       {
         "content-type": "multipart/form-data; boundary=----WebKitFormBoundary",
       },

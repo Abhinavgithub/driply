@@ -142,8 +142,9 @@ export function withAuth(
     const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(req.method);
     const pathname = ((req as unknown as { nextUrl?: { pathname: string } }).nextUrl?.pathname ??
       new URL(req.url).pathname) as string;
-    const MULTIPART_ROUTES = new Set<string>(["/api/items", "/api/profile"]);
-    const isUploadRoute = isMultipart && MULTIPART_ROUTES.has(pathname);
+    const MULTIPART_UPLOAD_ROUTES = new Set<string>(["POST /api/items", "PATCH /api/profile"]);
+    const routeKey = `${req.method} ${pathname}`;
+    const isUploadRoute = isMultipart && MULTIPART_UPLOAD_ROUTES.has(routeKey);
     if (isStateChanging && !isUploadRoute) {
       const lenHeader = req.headers.get("content-length");
       if (lenHeader && Number(lenHeader) > MAX_JSON_BODY_BYTES) {
