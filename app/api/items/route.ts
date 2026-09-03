@@ -261,19 +261,22 @@ async function resolveUploadMetadata(args: {
   }
 }
 
-export const GET = withAuth(async (user, req) => {
-  // ?ids=a,b,c narrows the result — used to mint fresh signed photo URLs when
-  // a long-lived page's URLs expire.
-  const idsParam = new URL(req.url).searchParams.get("ids");
-  const ids = idsParam ? [...new Set(idsParam.split(",").filter(Boolean))].slice(0, 50) : null;
+export const GET = withAuth(
+  async (user, req) => {
+    // ?ids=a,b,c narrows the result — used to mint fresh signed photo URLs when
+    // a long-lived page's URLs expire.
+    const idsParam = new URL(req.url).searchParams.get("ids");
+    const ids = idsParam ? [...new Set(idsParam.split(",").filter(Boolean))].slice(0, 50) : null;
 
-  const items = await prisma.item.findMany({
-    where: { userId: user.appUser.id, ...(ids ? { id: { in: ids } } : {}) },
-    orderBy: { createdAt: "desc" },
-  });
+    const items = await prisma.item.findMany({
+      where: { userId: user.appUser.id, ...(ids ? { id: { in: ids } } : {}) },
+      orderBy: { createdAt: "desc" },
+    });
 
-  return NextResponse.json({ items: await attachSignedPhotoUrls(items) });
-});
+    return NextResponse.json({ items: await attachSignedPhotoUrls(items) });
+  },
+  { key: (u) => `items:get:${u.appUser.id}`, max: 60 },
+);
 
 const MAX_WARDROBE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -400,7 +403,7 @@ export const POST = withAuth(
 
     return NextResponse.json({ items: await attachSignedPhotoUrls(createdItems) });
   },
-  { key: (u) => `items:post:${u.appUser.id}`, max: 20 },
+  { key: (u) => `items:post:${u.appUser.id}`, max: 20, failClosed: true },
 );
 
 export const DELETE = withAuth(
@@ -429,7 +432,7 @@ export const DELETE = withAuth(
 
     return NextResponse.json({ ok: true });
   },
-  { key: (u) => `items:delete:${u.appUser.id}`, max: 30 },
+  { key: (u) => `items:delete:${u.appUser.id}`, max: 30, failClosed: true },
 );
 
 export const PATCH = withAuth(
@@ -499,5 +502,5 @@ export const PATCH = withAuth(
     const [signedItem] = await attachSignedPhotoUrls([updated]);
     return NextResponse.json({ ok: true, item: signedItem });
   },
-  { key: (u) => `items:patch:${u.appUser.id}`, max: 30 },
+  { key: (u) => `items:patch:${u.appUser.id}`, max: 30, failClosed: true },
 );

@@ -125,7 +125,7 @@ function isAllowedOrigin(req: NextRequest): boolean {
       return null;
     }
   })();
-  if (!allowedOrigin) return true;
+  if (!allowedOrigin) return false;
   if (origin) return origin === allowedOrigin;
   if (referer) {
     try {
@@ -134,8 +134,9 @@ function isAllowedOrigin(req: NextRequest): boolean {
       return false;
     }
   }
-  // No Origin/Referer — allow (e.g. server-to-server, curl); CSRF requires browser to send Origin.
-  return true;
+  // No Origin/Referer on state-changing request — deny (OWASP: fail-closed for CSRF).
+  // withAuth only calls this for POST/PATCH/PUT/DELETE, so safe to reject.
+  return false;
 }
 
 type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
@@ -154,7 +155,7 @@ type AuthedHandler = (user: CurrentUser, req: NextRequest) => Promise<NextRespon
  */
 export function withAuth(
   handler: AuthedHandler,
-  rateLimit?: { key: (user: CurrentUser) => string; max: number },
+  rateLimit?: { key: (user: CurrentUser) => string; max: number; failClosed?: boolean },
 ): (req: NextRequest) => Promise<NextResponse> {
   return async (req) => {
     const user = await getCurrentUser();
@@ -165,7 +166,12 @@ export function withAuth(
     if (["POST", "PATCH", "PUT", "DELETE"].includes(req.method) && !isAllowedOrigin(req)) {
       return NextResponse.json({ error: "Forbidden: invalid origin." }, { status: 403 });
     }
-    if (rateLimit && !(await checkRateLimit(rateLimit.key(user), rateLimit.max))) {
+    if (
+      rateLimit &&
+      !(await checkRateLimit(rateLimit.key(user), rateLimit.max, {
+        failClosed: rateLimit.failClosed,
+      }))
+    ) {
       const res = NextResponse.json(
         { error: "Too many requests. Try again in a minute." },
         { status: 429 },

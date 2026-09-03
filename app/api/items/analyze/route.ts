@@ -116,5 +116,5 @@ export const POST = withAuth(
       return NextResponse.json({ ok: false, reason: code });
     }
   },
-  { key: (user) => `analyze:${user.appUser.id}`, max: 3 },
+  { key: (user) => `analyze:${user.appUser.id}`, max: 3, failClosed: true },
 );

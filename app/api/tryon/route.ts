@@ -97,7 +97,7 @@ export const POST = withAuth(
 
     return NextResponse.json({ ok: true, jobId: job.id, status: "pending" });
   },
-  { key: (u) => `tryon:post:${u.appUser.id}`, max: 10 },
+  { key: (u) => `tryon:post:${u.appUser.id}`, max: 10, failClosed: true },
 );
 
 /** Poll a try-on job. Returns a signed image URL once the job is READY. */

@@ -20,7 +20,7 @@ export const GET = withAuth(async (currentUser) => {
 export const POST = withAuth(async (currentUser) => {
   const userId = currentUser.appUser.id;
 
-  if (!(await checkRateLimit(`style-dna:generate:${userId}`, 5))) {
+  if (!(await checkRateLimit(`style-dna:generate:${userId}`, 5, { failClosed: true }))) {
     return NextResponse.json({ error: "Too many requests. Try again later." }, { status: 429 });
   }
 

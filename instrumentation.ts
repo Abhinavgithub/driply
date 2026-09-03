@@ -4,8 +4,6 @@
  * the complete list of missing vars — instead of throwing mid-request.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
-
   const { validateEnv } = await import("@/lib/env");
   try {
     const { warnings } = validateEnv();

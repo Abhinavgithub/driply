@@ -8,6 +8,7 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // 'unsafe-inline' for scripts is required by Next.js bootstrap scripts (no nonce
 // setup); dev additionally needs 'unsafe-eval' and websockets for Fast Refresh.
+// Phase 1 hardens headers without full nonce migration (tradeoff 3).
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -22,6 +23,7 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
+  "upgrade-insecure-requests",
 ].join("; ");
 
 const nextConfig: NextConfig = {
@@ -35,17 +37,23 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
-          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // Deny camera/mic/geolocation by default; /today overrides geolocation for weather lookup.
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          { key: "X-DNS-Prefetch-Control", value: "on" },
+          { key: "X-DNS-Prefetch-Control", value: "off" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+          { key: "X-Permitted-Cross-Domain-Policies", value: "none" },
         ],
       },
       {
-        source: "/today",
+        source: "/today/:path*",
         headers: [
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
         ],

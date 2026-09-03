@@ -38,9 +38,19 @@ function makeHandler(status = 200, body: unknown = { ok: true }) {
 }
 
 function makeRequest(url: string, method: string, headers: Record<string, string>, body?: string) {
+  const headersWithCsrf: Record<string, string> = { ...headers };
+  if (
+    ["POST", "PATCH", "PUT", "DELETE"].includes(method) &&
+    !headersWithCsrf["origin"] &&
+    !headersWithCsrf["Origin"] &&
+    !headersWithCsrf["referer"] &&
+    !headersWithCsrf["Referer"]
+  ) {
+    headersWithCsrf["origin"] = "http://localhost:3000";
+  }
   const req = new NextRequest(url, {
     method,
-    headers,
+    headers: headersWithCsrf,
     body: body as unknown as BodyInit | undefined,
   });
   return req;
@@ -322,6 +332,7 @@ describe("withAuth body cap", () => {
     const body = JSON.stringify({ data: large });
     const req = new NextRequest("http://localhost:3000/api/tryon", {
       method: "POST",
+      headers: { origin: "http://localhost:3000" },
       body: body as unknown as BodyInit,
     });
     // No content-type set
@@ -366,6 +377,64 @@ describe("withAuth body cap", () => {
     const res = await guarded(req);
     expect(res.status).toBe(413);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("rejects state-changing without Origin/Referer (CSRF fail-closed)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const body = JSON.stringify({ a: 1 });
+    const req = new NextRequest("http://localhost:3000/api/outfits", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: body as unknown as BodyInit,
+    });
+    // No origin/referer set -> with real isAllowedOrigin should be 403
+    const res = await guarded(req);
+    expect(res.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("rejects mismatched Origin (CSRF)", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const body = JSON.stringify({ a: 1 });
+    const req = makeRequest(
+      "http://localhost:3000/api/outfits",
+      "POST",
+      { "content-type": "application/json", origin: "https://evil.com" },
+      body,
+    );
+    const res = await guarded(req);
+    expect(res.status).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("allows valid Referer when Origin absent", async () => {
+    const handler = makeHandler();
+    const guarded = withAuth(handler);
+    const body = JSON.stringify({ a: 1 });
+    const req = new NextRequest("http://localhost:3000/api/outfits", {
+      method: "POST",
+      headers: { "content-type": "application/json", referer: "http://localhost:3000/some-page" },
+      body: body as unknown as BodyInit,
+    });
+    const res = await guarded(req);
+    expect(res.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it("allows GET without Origin (CSRF only for state-changing)", async () => {
+    const handler = vi.fn(async () => {
+      const { NextResponse } = await import("next/server");
+      return NextResponse.json({ ok: true }, { status: 200 });
+    });
+    const guarded = withAuth(handler);
+    const req = new NextRequest("http://localhost:3000/api/items?ids=a", {
+      method: "GET",
+    });
+    const res = await guarded(req);
+    expect(res.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it("allows multipart upload under per-route limit (2×8MB batch to /api/items, avatar+try-on to /api/profile)", async () => {
