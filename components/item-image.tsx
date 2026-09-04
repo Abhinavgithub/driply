@@ -16,7 +16,7 @@ type ItemImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError
  * the item once and swaps it in. A second failure (e.g. item deleted) is
  * left alone.
  */
-export function ItemImage({ itemId, src, alt, loading, ...imgProps }: ItemImageProps) {
+export function ItemImage({ itemId, src, alt, loading, sizes, ...imgProps }: ItemImageProps) {
   const apiFetch = useApiFetch();
   // Keyed by the src they were fetched for, so a parent passing a new src
   // automatically discards stale refresh state — no reset effect needed.
@@ -41,6 +41,9 @@ export function ItemImage({ itemId, src, alt, loading, ...imgProps }: ItemImageP
       });
   }
 
+  // NOTE: no width/height — remote photo dimensions are unknown. Layout shift
+  // is bounded by the callers' fixed CSS heights (object-cover); sizes +
+  // async decoding keep the download path lean.
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -48,6 +51,8 @@ export function ItemImage({ itemId, src, alt, loading, ...imgProps }: ItemImageP
       src={freshSrc ?? src}
       alt={alt}
       loading={loading ?? "lazy"}
+      decoding="async"
+      sizes={sizes ?? "(max-width: 640px) 100vw, 50vw"}
       onError={onError}
     />
   );

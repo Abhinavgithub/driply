@@ -10,7 +10,11 @@ export default function GlobalError({
   return (
     <html lang="en">
       <body>
-        <div style={{ padding: 32, textAlign: "center", fontFamily: "system-ui" }}>
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{ padding: 32, textAlign: "center", fontFamily: "system-ui" }}
+        >
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Something went wrong</h2>
           <p style={{ marginTop: 8, color: "#666" }}>
             {error.message || "An unexpected error occurred."}

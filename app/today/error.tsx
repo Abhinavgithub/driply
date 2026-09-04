@@ -8,7 +8,7 @@ export default function TodayError({
   reset: () => void;
 }) {
   return (
-    <section className="app-card rounded-3xl p-6 text-center">
+    <section className="app-card rounded-3xl p-6 text-center" role="alert" aria-live="assertive">
       <h2 className="text-base font-semibold text-foreground">
         Couldn&apos;t load today&apos;s outfit
       </h2>

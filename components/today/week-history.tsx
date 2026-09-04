@@ -96,15 +96,11 @@ export function WeekHistory({ wornDateKeys, wornHistory }: WeekHistoryProps) {
                 setSelectedHistoryDay(selectedHistoryDay === day.key ? null : day.key)
               }
               className={`week-dot-wrap ${day.state}${selectedHistoryDay === day.key ? " selected" : ""}`}
-              style={{
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: day.state === "worn" ? "pointer" : "default",
-              }}
-              aria-label={day.state === "worn" ? `View outfit worn on ${day.label}` : undefined}
+              style={{ cursor: day.state === "worn" ? "pointer" : "default" }}
+              aria-label={`${day.label} — ${day.state === "worn" ? "worn, view outfit" : day.state}`}
+              aria-pressed={day.state === "worn" ? selectedHistoryDay === day.key : undefined}
             >
-              <div className="week-dot" />
+              <div className="week-dot" aria-hidden="true" />
             </button>
           </div>
         ))}

@@ -153,7 +153,16 @@ export default function TodayPage() {
   }
 
   if (!authReady) {
-    return <section className="app-card rounded-3xl p-6 text-sm muted-copy">Loading...</section>;
+    return (
+      <section
+        className="app-card rounded-3xl p-6 text-sm muted-copy"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        Loading...
+      </section>
+    );
   }
 
   return (
@@ -201,7 +210,7 @@ export default function TodayPage() {
           showTryOnPrompt={userProfile !== null && !userProfile.hasTryOnPhoto}
         />
       ) : displayError ? (
-        <section className="app-card rounded-3xl p-4">
+        <section className="app-card rounded-3xl p-4" role="alert">
           <div className="space-y-2">
             <div className="text-sm text-danger">{displayError}</div>
             <button
@@ -217,10 +226,16 @@ export default function TodayPage() {
 
       {/* ── Loading shimmer ── */}
       {rec.loading && !current ? (
-        <div className="outfit-hero">
-          <div className="outfit-hero-item outfit-hero-main shimmer" />
-          <div className="outfit-hero-item shimmer" />
-          <div className="outfit-hero-item shimmer" />
+        <div
+          className="outfit-hero"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          aria-label="Loading outfit recommendations"
+        >
+          <div className="outfit-hero-item outfit-hero-main shimmer" aria-hidden="true" />
+          <div className="outfit-hero-item shimmer" aria-hidden="true" />
+          <div className="outfit-hero-item shimmer" aria-hidden="true" />
         </div>
       ) : null}
 
@@ -254,7 +269,15 @@ export default function TodayPage() {
       {current ? <WeekHistory wornDateKeys={wornDateKeys} wornHistory={wornHistory} /> : null}
 
       {/* Undo toast — fixed above bottom nav */}
-      {undoRecord ? <UndoToast onUndo={() => void onUndo()} /> : null}
+      {undoRecord ? (
+        <UndoToast
+          onUndo={() => void onUndo()}
+          onDismiss={() => {
+            clearTimeout(undoRecord.timerId);
+            setUndoRecord(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
