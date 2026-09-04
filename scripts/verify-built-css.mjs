@@ -15,10 +15,22 @@ import { join } from "node:path";
 
 const CSS_DIR = ".next/static/css";
 
-// Selectors that must appear in the built bundle. `sdna-card`/`sdna-cta-card`
-// live at the very end of globals.css (the section that was dropped);
-// `mood-banner` is earlier — together they catch a truncated tail.
-const REQUIRED = ["sdna-card", "sdna-cta-card", "mood-banner"];
+// Selectors that must appear in the built bundle. `sdna-aurora-blob` and
+// `sdna-reveal-screen` live at the very end of globals.css (the section that
+// was dropped); `sdna-card`/`sdna-cta-card`/`mood-banner` are earlier —
+// together they catch a truncated tail at any cut point.
+const REQUIRED = [
+  "sdna-card",
+  "sdna-cta-card",
+  "mood-banner",
+  "sdna-aurora-blob",
+  "sdna-reveal-screen",
+];
+
+// Absolute size floor: the truncated bundle was 77,718 bytes vs ~90,000 for a
+// healthy one. A bundle that keeps all markers but is suspiciously small still
+// fails loudly instead of shipping partially styled CSS.
+const SIZE_FLOOR_BYTES = 85_000;
 
 let files;
 try {
@@ -33,7 +45,9 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const combined = files.map((f) => readFileSync(join(CSS_DIR, f), "utf8")).join("\n");
+const contents = files.map((f) => readFileSync(join(CSS_DIR, f), "utf8"));
+const combined = contents.join("\n");
+const totalBytes = contents.reduce((sum, css) => sum + Buffer.byteLength(css, "utf8"), 0);
 
 const missing = REQUIRED.filter((marker) => !combined.includes(marker));
 
@@ -46,4 +60,15 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`verify:css — OK (checked ${files.length} CSS file(s) for: ${REQUIRED.join(", ")})`);
+if (totalBytes < SIZE_FLOOR_BYTES) {
+  console.error(
+    `verify:css — built CSS bundle is only ${totalBytes} bytes (floor: ${SIZE_FLOOR_BYTES}).\n` +
+      `This usually means part of app/globals.css was dropped during the build. ` +
+      `Do not deploy this bundle.`,
+  );
+  process.exit(1);
+}
+
+console.log(
+  `verify:css — OK (checked ${files.length} CSS file(s), ${totalBytes} bytes, for: ${REQUIRED.join(", ")})`,
+);
