@@ -1137,7 +1137,8 @@ textarea {
   --lp-bg2: oklch(13% 0.008 240);
   --lp-surface: oklch(16% 0.01 240);
   --lp-border: oklch(22% 0.01 240);
-  --lp-muted: oklch(45% 0.01 240);
+  /* 60% lightness for 4.5:1 AA on the near-black landing bg (axe caught 45%). */
+  --lp-muted: oklch(60% 0.01 240);
   --lp-text: oklch(95% 0.005 80);
   --lp-text-dim: oklch(65% 0.008 240);
   --lp-accent: oklch(75% 0.18 200);
@@ -2336,7 +2337,8 @@ textarea {
   --lp-bg2: oklch(13% 0.008 240);
   --lp-surface: oklch(16% 0.01 240);
   --lp-border: oklch(22% 0.01 240);
-  --lp-muted: oklch(45% 0.01 240);
+  /* 60% lightness for 4.5:1 AA on the near-black auth bg (same axe finding). */
+  --lp-muted: oklch(60% 0.01 240);
   --lp-text: oklch(95% 0.005 80);
   --lp-text-dim: oklch(65% 0.008 240);
   --lp-accent: oklch(75% 0.18 200);
