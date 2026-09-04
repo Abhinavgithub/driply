@@ -294,7 +294,9 @@ export default function ProfilePage() {
   return (
     <form onSubmit={onSave} className="space-y-6">
       {error ? (
-        <section className="app-card rounded-3xl p-4 text-sm text-danger">{error}</section>
+        <section role="alert" className="app-card rounded-3xl p-4 text-sm text-danger">
+          {error}
+        </section>
       ) : null}
 
       {success ? (
@@ -430,13 +432,19 @@ export default function ProfilePage() {
               <span className="text-sm font-semibold text-foreground sm:w-28 sm:shrink-0">
                 {q.shortLabel}
               </span>
-              <div className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap">
+              <div
+                role="radiogroup"
+                aria-label={q.shortLabel}
+                className="grid grid-cols-2 gap-1.5 sm:flex sm:flex-wrap"
+              >
                 {q.options.map((option) => {
                   const isSelected = localPrefs[q.field] === option.value;
                   return (
                     <button
                       key={option.value}
                       type="button"
+                      role="radio"
+                      aria-checked={isSelected}
                       onClick={() =>
                         setLocalPrefs((prev) => ({ ...prev, [q.field]: option.value }))
                       }

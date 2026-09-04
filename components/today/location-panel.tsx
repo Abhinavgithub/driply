@@ -80,26 +80,36 @@ export function LocationPanel({
             </button>
           </div>
         ) : null}
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <form
+          className="flex flex-col gap-3 sm:flex-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void onSearch();
+          }}
+        >
+          <label htmlFor="location-city-search" className="sr-only">
+            City, e.g. Paris
+          </label>
           <input
+            id="location-city-search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search city"
+            autoComplete="off"
             className="input-base w-full"
           />
-          <button
-            type="button"
-            onClick={() => void onSearch()}
-            disabled={searchLoading}
-            className="button-secondary"
-          >
+          <button type="submit" disabled={searchLoading} className="button-secondary">
             {searchLoading ? "Searching..." : "Search"}
           </button>
           <button type="button" onClick={onRetryDevice} className="button-ghost">
             Retry device
           </button>
-        </div>
-        {searchError ? <div className="text-sm muted-copy">{searchError}</div> : null}
+        </form>
+        {searchError ? (
+          <div role="alert" className="text-sm muted-copy">
+            {searchError}
+          </div>
+        ) : null}
         {searchResults.length > 0 ? (
           <div className="space-y-2">
             {searchResults.map((result) => (

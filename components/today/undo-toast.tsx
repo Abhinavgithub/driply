@@ -1,9 +1,22 @@
 "use client";
 
+import { useEffect } from "react";
+
 /** "Outfit logged" toast pinned above the bottom nav with an undo action. */
-export function UndoToast({ onUndo }: { onUndo: () => void }) {
+export function UndoToast({ onUndo, onDismiss }: { onUndo: () => void; onDismiss: () => void }) {
+  // Escape dismisses without undoing (the outfit stays logged).
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onDismiss();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onDismiss]);
+
   return (
     <div
+      role="status"
+      aria-live="polite"
       style={{
         position: "fixed",
         bottom: "calc(64px + 16px)",

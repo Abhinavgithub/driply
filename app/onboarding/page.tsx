@@ -340,7 +340,7 @@ export default function OnboardingPage() {
           {/* Progress */}
           {!showSuccess && (
             <div className="lp-onboarding-progress">
-              <div className="lp-onboarding-progress-steps">
+              <div className="lp-onboarding-progress-steps" aria-hidden="true">
                 <div
                   className={`lp-onboarding-progress-step${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}
                 >
@@ -355,21 +355,26 @@ export default function OnboardingPage() {
                   <div className="lp-onboarding-progress-fill" />
                 </div>
               </div>
-              <div className="lp-onboarding-progress-labels">
-                <div
+              <ol aria-label="Onboarding progress" className="lp-onboarding-progress-labels">
+                <li
+                  aria-current={isStep0Active ? "step" : undefined}
                   className={`lp-onboarding-progress-label${isStep0Done ? " done" : isStep0Active ? " active" : ""}`}
                 >
                   Your style
-                </div>
-                <div
+                </li>
+                <li
+                  aria-current={isStep1Active ? "step" : undefined}
                   className={`lp-onboarding-progress-label${isStep1Done ? " done" : isStep1Active ? " active" : ""}`}
                 >
                   Your wardrobe
-                </div>
-                <div className={`lp-onboarding-progress-label${isStep2Active ? " active" : ""}`}>
+                </li>
+                <li
+                  aria-current={isStep2Active ? "step" : undefined}
+                  className={`lp-onboarding-progress-label${isStep2Active ? " active" : ""}`}
+                >
                   AI preview
-                </div>
-              </div>
+                </li>
+              </ol>
             </div>
           )}
 
@@ -413,6 +418,8 @@ export default function OnboardingPage() {
                 </p>
 
                 <div
+                  role="radiogroup"
+                  aria-label={currentQuestion.question}
                   style={{
                     display: "grid",
                     gridTemplateColumns: currentQuestion.options.length <= 3 ? "1fr" : "1fr 1fr",
@@ -425,6 +432,8 @@ export default function OnboardingPage() {
                     <button
                       key={option.value}
                       type="button"
+                      role="radio"
+                      aria-checked={quizAnswers[currentQuestion.field] === option.value}
                       onClick={() => void onQuizOptionSelected(option.value)}
                       style={{
                         display: "flex",
@@ -458,11 +467,18 @@ export default function OnboardingPage() {
 
                 {/* Quiz sub-progress dots */}
                 <div
+                  role="progressbar"
+                  aria-label="Quiz progress"
+                  aria-valuemin={1}
+                  aria-valuemax={QUIZ_QUESTIONS.length}
+                  aria-valuenow={quizStep + 1}
+                  aria-valuetext={`Question ${quizStep + 1} of ${QUIZ_QUESTIONS.length}`}
                   style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}
                 >
                   {QUIZ_QUESTIONS.map((_, i) => (
                     <div
                       key={i}
+                      aria-hidden="true"
                       style={{
                         width: 6,
                         height: 6,
@@ -516,57 +532,71 @@ export default function OnboardingPage() {
                   {categories.map(({ kind, label }) => (
                     <div key={kind} className="lp-onboarding-upload-zone">
                       <div className="lp-onboarding-upload-label">{label}</div>
-                      <button
-                        type="button"
-                        onClick={() => inputRefMap[kind].current?.click()}
-                        disabled={Boolean(uploading[kind])}
-                        className={`lp-onboarding-upload-area${previews[kind] ? " has-preview" : ""}`}
-                        aria-label={`Upload ${label}`}
+                      {/* Group (not a button): the zone hosts two actions — replace
+                          via the image button and remove via the X button.
+                          Nesting buttons is invalid HTML and unreachable by keyboard. */}
+                      <div
+                        role="group"
+                        aria-label={`${label} photo`}
+                        className={`lp-onboarding-upload-area${previews[kind] ? " has-preview" : ""}${uploading[kind] ? " is-uploading" : ""}`}
                       >
                         {previews[kind] ? (
                           <>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={previews[kind]!}
-                              alt={label}
-                              className="lp-onboarding-upload-preview"
-                            />
+                            <button
+                              type="button"
+                              className="lp-onboarding-upload-replace"
+                              onClick={() => inputRefMap[kind].current?.click()}
+                              disabled={Boolean(uploading[kind])}
+                              aria-label={`Replace ${label} photo`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={previews[kind]!}
+                                alt={label}
+                                className="lp-onboarding-upload-preview"
+                              />
+                            </button>
                             <button
                               type="button"
                               className="lp-onboarding-upload-remove"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removePreview(kind);
-                              }}
+                              onClick={() => removePreview(kind)}
                               aria-label={`Remove ${label} photo`}
                             >
                               <CloseIcon />
                             </button>
                           </>
                         ) : (
-                          <div className="lp-onboarding-upload-icon-wrap">
-                            {uploading[kind] ? (
-                              <div
-                                style={{
-                                  width: 24,
-                                  height: 24,
-                                  borderRadius: "50%",
-                                  border: "2px solid var(--lp-border)",
-                                  borderTopColor: "var(--lp-accent)",
-                                  animation: "spin 0.7s linear infinite",
-                                }}
-                              />
-                            ) : (
-                              <div className="lp-onboarding-upload-icon">
-                                <UploadIcon />
-                              </div>
-                            )}
-                            <span className="lp-onboarding-upload-text">
-                              {uploading[kind] ? "Uploading…" : "Add photo"}
+                          <button
+                            type="button"
+                            onClick={() => inputRefMap[kind].current?.click()}
+                            disabled={Boolean(uploading[kind])}
+                            className="lp-onboarding-upload-empty"
+                            aria-label={`Upload ${label}`}
+                          >
+                            <span className="lp-onboarding-upload-icon-wrap" aria-hidden="true">
+                              {uploading[kind] ? (
+                                <span
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    borderRadius: "50%",
+                                    border: "2px solid var(--lp-border)",
+                                    borderTopColor: "var(--lp-accent)",
+                                    animation: "spin 0.7s linear infinite",
+                                  }}
+                                />
+                              ) : (
+                                <span className="lp-onboarding-upload-icon">
+                                  <UploadIcon />
+                                </span>
+                              )}
+                              <span className="lp-onboarding-upload-text">
+                                {uploading[kind] ? "Uploading…" : "Add photo"}
+                              </span>
                             </span>
-                          </div>
+                          </button>
                         )}
-                      </button>
+                      </div>
                       <div
                         className={`lp-onboarding-upload-count${counts[kind] > 0 ? " has-items" : ""}`}
                       >
@@ -645,61 +675,72 @@ export default function OnboardingPage() {
                   only for AI previews — never shared.
                 </p>
 
-                {/* Full-body upload zone */}
-                <button
-                  type="button"
-                  onClick={() => tryOnInputRef.current?.click()}
-                  disabled={tryOnUploading}
-                  className={`lp-onboarding-fullbody-area${tryOnPreview ? " has-preview" : ""}`}
-                  aria-label="Upload full-body photo"
+                {/* Full-body upload zone (group: replace + remove are sibling buttons) */}
+                <div
+                  role="group"
+                  aria-label="Full-body photo"
+                  className={`lp-onboarding-fullbody-area${tryOnPreview ? " has-preview" : ""}${tryOnUploading ? " is-uploading" : ""}`}
                 >
                   {tryOnPreview ? (
                     <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={tryOnPreview}
-                        alt="Try-on photo preview"
-                        className="lp-onboarding-fullbody-preview"
-                      />
+                      <button
+                        type="button"
+                        className="lp-onboarding-fullbody-replace"
+                        onClick={() => tryOnInputRef.current?.click()}
+                        disabled={tryOnUploading}
+                        aria-label="Replace full-body photo"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={tryOnPreview}
+                          alt="Try-on photo preview"
+                          className="lp-onboarding-fullbody-preview"
+                        />
+                      </button>
                       <button
                         type="button"
                         className="lp-onboarding-fullbody-remove"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeTryOnPreview();
-                        }}
+                        onClick={() => removeTryOnPreview()}
                         aria-label="Remove try-on photo"
                       >
                         <CloseIcon />
                       </button>
                     </>
                   ) : (
-                    <div className="lp-onboarding-fullbody-icon-wrap">
-                      <div className="lp-onboarding-fullbody-icon">
-                        {tryOnUploading ? (
-                          <div
-                            style={{
-                              width: 24,
-                              height: 24,
-                              borderRadius: "50%",
-                              border: "2px solid var(--lp-border)",
-                              borderTopColor: "var(--lp-accent)",
-                              animation: "spin 0.7s linear infinite",
-                            }}
-                          />
-                        ) : (
-                          <PersonIcon />
-                        )}
-                      </div>
-                      <div className="lp-onboarding-fullbody-title">
-                        {tryOnUploading ? "Uploading…" : "Upload full-body photo"}
-                      </div>
-                      <div className="lp-onboarding-fullbody-hint">
-                        JPG, PNG or WEBP · Max 10 MB
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => tryOnInputRef.current?.click()}
+                      disabled={tryOnUploading}
+                      className="lp-onboarding-fullbody-empty"
+                      aria-label="Upload full-body photo"
+                    >
+                      <span className="lp-onboarding-fullbody-icon-wrap" aria-hidden="true">
+                        <span className="lp-onboarding-fullbody-icon">
+                          {tryOnUploading ? (
+                            <span
+                              style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: "50%",
+                                border: "2px solid var(--lp-border)",
+                                borderTopColor: "var(--lp-accent)",
+                                animation: "spin 0.7s linear infinite",
+                              }}
+                            />
+                          ) : (
+                            <PersonIcon />
+                          )}
+                        </span>
+                        <span className="lp-onboarding-fullbody-title">
+                          {tryOnUploading ? "Uploading…" : "Upload full-body photo"}
+                        </span>
+                        <span className="lp-onboarding-fullbody-hint">
+                          JPG, PNG or WEBP · Max 10 MB
+                        </span>
+                      </span>
+                    </button>
                   )}
-                </button>
+                </div>
 
                 {tryOnError ? (
                   <p className="lp-onboarding-error" style={{ marginBottom: 12 }}>

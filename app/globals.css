@@ -5,7 +5,7 @@
   --surface: #ffffff;
   --surface-subtle: #f2f2ee;
   --foreground: #111111;
-  --muted-foreground: #6a6a64;
+  --muted-foreground: #5a5a54;
   --border: rgba(17, 17, 17, 0.08);
   --border-strong: rgba(17, 17, 17, 0.14);
   --accent: #111111;
@@ -256,6 +256,13 @@ textarea {
   border-color: var(--border-strong);
 }
 
+/* Visible keyboard focus for all interactive elements (WCAG 2.4.7).
+   Never remove outlines without providing an equivalent indicator. */
+:is(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -411,6 +418,8 @@ textarea {
   font-size: 13px;
   color: oklch(92% 0.04 80);
   font-weight: 500;
+  /* Legibility over the animated gradient blends (P2-5). */
+  text-shadow: 0 1px 8px oklch(0% 0 0 / 0.45);
 }
 .mood-weather {
   display: flex;
@@ -433,6 +442,7 @@ textarea {
   text-align: right;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-shadow: 0 1px 8px oklch(0% 0 0 / 0.45);
 }
 .mood-wpills {
   display: flex;
@@ -448,8 +458,9 @@ textarea {
   font-size: 10px;
   font-weight: 600;
   background: oklch(100% 0 0 / 0.08);
-  border: 1px solid oklch(100% 0 0 / 0.14);
-  color: oklch(85% 0.04 240);
+  border: 1px solid oklch(100% 0 0 / 0.22);
+  color: oklch(90% 0.03 240);
+  text-shadow: 0 1px 6px oklch(0% 0 0 / 0.45);
 }
 
 /* ── Hero Outfit Collage ── */
@@ -470,6 +481,12 @@ textarea {
   border: 1px solid var(--border);
   background: var(--surface-subtle);
   cursor: pointer;
+  /* Tiles are native <button>s (keyboard operable) — reset UA button styles. */
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  appearance: none;
   transition:
     border-color 0.25s,
     transform 0.25s;
@@ -848,7 +865,15 @@ textarea {
   justify-content: center;
   border: 1px solid var(--border);
   background: var(--surface-subtle);
+  /* Native <button> reset (was previously wiped inline, which also killed
+     the state backgrounds below and the focus ring). */
+  padding: 0;
+  font: inherit;
+  color: inherit;
   transition: transform 0.2s;
+}
+.week-dot-wrap:disabled {
+  cursor: default;
 }
 .week-dot-wrap.worn {
   background: oklch(75% 0.18 200 / 0.1);
@@ -878,7 +903,12 @@ textarea {
   background: var(--background);
 }
 .week-dot-wrap.missed .week-dot {
-  background: oklch(60% 0.14 25 / 0.5);
+  /* Hollow ring (not just a different color) so missed vs worn is
+     distinguishable without color vision. */
+  background: transparent;
+  border: 2px solid oklch(60% 0.14 25 / 0.6);
+  width: 10px;
+  height: 10px;
 }
 
 /* ── Upload dropzone ── */
@@ -2652,6 +2682,10 @@ textarea {
 .lp-onboarding-progress-labels {
   display: flex;
   gap: 8px;
+  /* The labels container is an <ol> for progress semantics — reset list styles. */
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 .lp-onboarding-progress-label {
   flex: 1;
@@ -2768,6 +2802,39 @@ textarea {
 .lp-onboarding-upload-area.has-preview:hover:not(:disabled) {
   border-color: var(--lp-accent);
   transform: translateY(-2px);
+}
+
+/* Inner action buttons of the upload group (the zone itself is a group div
+   so replace + remove can be sibling native buttons — no nested buttons). */
+.lp-onboarding-upload-empty,
+.lp-onboarding-upload-replace {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+}
+.lp-onboarding-upload-replace {
+  position: absolute;
+  inset: 0;
+}
+.lp-onboarding-upload-empty:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.lp-onboarding-upload-area.is-uploading {
+  opacity: 0.75;
+}
+.lp-onboarding-upload-area.is-uploading:hover {
+  transform: none;
 }
 
 .lp-onboarding-upload-preview {
@@ -2888,6 +2955,35 @@ textarea {
   height: 100%;
   object-fit: cover;
   border-radius: 16px;
+}
+.lp-onboarding-fullbody-empty,
+.lp-onboarding-fullbody-replace {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+.lp-onboarding-fullbody-empty {
+  min-height: 120px;
+}
+.lp-onboarding-fullbody-replace {
+  position: absolute;
+  inset: 0;
+}
+.lp-onboarding-fullbody-empty:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.lp-onboarding-fullbody-area.is-uploading {
+  opacity: 0.75;
 }
 .lp-onboarding-fullbody-remove {
   position: absolute;

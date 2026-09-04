@@ -10,11 +10,23 @@ import type { RecommendationOption } from "@/lib/types/wardrobe";
  * Typewriter chat bubble. Render keyed by the message so a new message
  * restarts the dots → typing → done sequence from clean state.
  */
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 function ChatBubble({ message }: { message: string }) {
-  const [chatText, setChatText] = useState("");
-  const [chatPhase, setChatPhase] = useState<"dots" | "typing" | "done">("dots");
+  // Reduced motion: initialize to the final state (the parent keys by message,
+  // so a new message remounts from clean state).
+  const [chatText, setChatText] = useState(() => (prefersReducedMotion() ? message : ""));
+  const [chatPhase, setChatPhase] = useState<"dots" | "typing" | "done">(() =>
+    prefersReducedMotion() ? "done" : "dots",
+  );
 
   useEffect(() => {
+    // Reduced motion handled by initial state above — no animation to run.
+    if (prefersReducedMotion()) return;
     let rafId: number | null = null;
     const MS_PER_CHAR = 22;
     const timeout = setTimeout(() => {
@@ -43,7 +55,7 @@ function ChatBubble({ message }: { message: string }) {
   }, [message]);
 
   return (
-    <div className="ai-chat-bubble">
+    <div className="ai-chat-bubble" aria-live="polite" aria-busy={chatPhase !== "done"}>
       {chatPhase === "dots" ? (
         <div className="typing-dots">
           <div className="typing-dot" />

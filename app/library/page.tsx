@@ -68,6 +68,10 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ itemId: string; label: string } | null>(
+    null,
+  );
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
@@ -203,8 +207,16 @@ export default function LibraryPage() {
     }
   }
 
-  async function onDeleteItem(itemId: string, itemLabel: string) {
-    if (!window.confirm(`Remove "${itemLabel}"?`)) return;
+  function cancelDelete() {
+    setPendingDelete(null);
+    deleteTriggerRef.current?.focus();
+    deleteTriggerRef.current = null;
+  }
+
+  async function confirmDeleteItem() {
+    if (!pendingDelete) return;
+    const { itemId } = pendingDelete;
+    setPendingDelete(null);
     setError(null);
     setDeletingId(itemId);
     try {
@@ -220,6 +232,9 @@ export default function LibraryPage() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDeletingId(null);
+      // Return focus to the invoking Remove button.
+      deleteTriggerRef.current?.focus();
+      deleteTriggerRef.current = null;
     }
   }
 
@@ -279,7 +294,9 @@ export default function LibraryPage() {
   return (
     <div className="space-y-6">
       {error ? (
-        <section className="app-card rounded-3xl p-4 text-sm text-danger">{error}</section>
+        <section role="alert" className="app-card rounded-3xl p-4 text-sm text-danger">
+          {error}
+        </section>
       ) : null}
 
       <form onSubmit={onSubmit} className="app-card rounded-3xl p-4">
@@ -294,6 +311,7 @@ export default function LibraryPage() {
           role="button"
           tabIndex={0}
           aria-label="Upload wardrobe photos"
+          aria-describedby="upload-dropzone-constraints"
           className={`upload-dropzone${dragOver ? " drag-over" : ""}`}
           onClick={() => fileInputRef.current?.click()}
           onKeyDown={(e) => {
@@ -339,7 +357,7 @@ export default function LibraryPage() {
                 ? `${files.length} photo${files.length > 1 ? "s" : ""} selected`
                 : "Drop photos here"}
             </div>
-            <div className="text-xs muted-copy mt-0.5">
+            <div id="upload-dropzone-constraints" className="text-xs muted-copy mt-0.5">
               {files.length
                 ? "Click to change selection"
                 : `or click to browse · up to ${MAX_UPLOAD_PHOTOS} images`}
@@ -617,7 +635,10 @@ export default function LibraryPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => onDeleteItem(it.id, `${it.subtype}`)}
+                              onClick={(e) => {
+                                deleteTriggerRef.current = e.currentTarget;
+                                setPendingDelete({ itemId: it.id, label: `${it.subtype}` });
+                              }}
                               disabled={deletingId === it.id}
                               className="button-ghost w-full"
                             >
@@ -644,6 +665,51 @@ export default function LibraryPage() {
           </section>
         );
       })}
+
+      {pendingDelete ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cancelDelete();
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-dialog-title"
+            aria-describedby="delete-dialog-desc"
+            className="app-card w-full max-w-sm rounded-3xl p-6"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") cancelDelete();
+            }}
+          >
+            <h2 id="delete-dialog-title" className="text-base font-semibold text-foreground">
+              Remove item?
+            </h2>
+            <p id="delete-dialog-desc" className="mt-2 text-sm muted-copy">
+              Remove &ldquo;{pendingDelete.label}&rdquo; from your wardrobe? This cannot be undone.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => cancelDelete()}
+                className="button-secondary w-full"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteItem()}
+                className="button-primary w-full"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

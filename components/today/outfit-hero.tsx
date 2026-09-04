@@ -37,8 +37,14 @@ function HeroTile({
   main?: boolean;
   onSwap: () => void;
 }) {
+  const label = `${formatEnumLabel(item.subtype)} (${category.toLowerCase()}) — activate for another look`;
   return (
-    <div className={`outfit-hero-item${main ? " outfit-hero-main" : ""}`} onClick={onSwap}>
+    <button
+      type="button"
+      className={`outfit-hero-item${main ? " outfit-hero-main" : ""}`}
+      onClick={onSwap}
+      aria-label={label}
+    >
       <ItemImage itemId={item.id} src={item.photoUrl} alt={item.subtype} />
       <div className="outfit-item-tag">
         <div>
@@ -47,11 +53,14 @@ function HeroTile({
         </div>
         <div
           className="outfit-item-swatch"
+          aria-hidden="true"
           style={{ background: COLOR_SWATCHES[item.colorFamily] ?? "#888" }}
         />
       </div>
-      <div className="outfit-swap-hint">↔ Another look</div>
-    </div>
+      <div className="outfit-swap-hint" aria-hidden="true">
+        ↔ Another look
+      </div>
+    </button>
   );
 }
 

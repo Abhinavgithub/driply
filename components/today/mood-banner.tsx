@@ -84,6 +84,14 @@ export function MoodBanner({
     glowRef.current.style.background = mood.glow;
     const container = particlesRef.current;
     container.innerHTML = "";
+    // Reduced motion: skip decorative particles entirely (the global CSS
+    // override would kill them post-paint anyway — avoid the layout cost).
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
     for (let i = 0; i < 14; i++) {
       const p = document.createElement("div");
       p.className = "mood-particle";
@@ -96,7 +104,7 @@ export function MoodBanner({
     <div className="mood-banner">
       <div className="mood-gradient" ref={gradientRef} />
       <div className="mood-glow" ref={glowRef} />
-      <div className="mood-particles" ref={particlesRef} />
+      <div className="mood-particles" ref={particlesRef} aria-hidden="true" />
       <div className="mood-overlay" />
       <div className="mood-content">
         <div>

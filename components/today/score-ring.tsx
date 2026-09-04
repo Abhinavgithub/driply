@@ -21,6 +21,18 @@ export function ScoreRing({ option, displayName, archetypeName }: ScoreRingProps
 
   useEffect(() => {
     const target = Math.round(option.totalScore * 100);
+    // Reduced motion: jump straight to the final value (deferred via rAF so
+    // the effect body itself doesn't set state synchronously).
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      const rafId = requestAnimationFrame(() => {
+        setScoreDisplay(target);
+        setScoreAnimated(true);
+      });
+      return () => cancelAnimationFrame(rafId);
+    }
     let rafId: number | null = null;
     const timer = setTimeout(() => {
       setScoreAnimated(true);
@@ -41,7 +53,13 @@ export function ScoreRing({ option, displayName, archetypeName }: ScoreRingProps
   return (
     <div className="score-ring-section">
       <div className="score-ring-wrap">
-        <svg width="108" height="108" viewBox="0 0 108 108">
+        <svg
+          width="108"
+          height="108"
+          viewBox="0 0 108 108"
+          role="img"
+          aria-label={`Fit score ${Math.round(option.totalScore * 100)} out of 100`}
+        >
           <circle className="ring-track" cx="54" cy="54" r="46" />
           <circle
             className="ring-fill"

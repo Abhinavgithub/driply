@@ -59,6 +59,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [fetchedProfile, setFetchedProfile] = useState<AppProfile | null>(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   // Derived so a sign-out drops the profile immediately without an extra
   // state reset; the next sign-in refetches and overwrites.
@@ -84,6 +86,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isProfileMenuOpen) return;
 
+    function closeAndRestoreFocus() {
+      setIsProfileMenuOpen(false);
+      // Return focus to the trigger so keyboard users don't lose their place.
+      menuTriggerRef.current?.focus();
+    }
+
     function handlePointerDown(event: MouseEvent) {
       if (!profileMenuRef.current?.contains(event.target as Node)) {
         setIsProfileMenuOpen(false);
@@ -92,12 +100,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setIsProfileMenuOpen(false);
+        closeAndRestoreFocus();
+        return;
+      }
+      // Lightweight focus trap: wrap Tab across the menu's focusable items.
+      if (event.key === "Tab" && menuRef.current) {
+        const items = Array.from(
+          menuRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          ),
+        ).filter((el) => el.offsetParent !== null);
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (event.shiftKey && (active === first || !menuRef.current.contains(active))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && active === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     }
 
     document.addEventListener("mousedown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
+    // Move focus into the menu on open for screen-reader and keyboard users.
+    menuRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
 
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
@@ -265,6 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {user ? (
               <div ref={profileMenuRef} className="relative">
                 <button
+                  ref={menuTriggerRef}
                   type="button"
                   onClick={() => setIsProfileMenuOpen((open) => !open)}
                   aria-label="Open account menu"
@@ -301,8 +332,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
 
                 {isProfileMenuOpen ? (
-                  <div className="profile-menu app-card absolute right-0 top-[calc(100%+0.6rem)] min-w-52 rounded-2xl p-2">
-                    <div className="px-3 py-2">
+                  <div
+                    ref={menuRef}
+                    role="menu"
+                    aria-label="Account menu"
+                    className="profile-menu app-card absolute right-0 top-[calc(100%+0.6rem)] min-w-52 rounded-2xl p-2"
+                  >
+                    <div className="px-3 py-2" aria-hidden="true">
                       <p className="text-sm font-semibold text-foreground">{displayName}</p>
                     </div>
                     <Link
