@@ -27,6 +27,8 @@ Goal: catch the bypass/info-disclosure classes Codex has flagged on Driply
 | 6 | Every route has a rate limit: GETs included (`items:get`, `weather:get`, …). Cost-sensitive writes (`tryon:post`, `analyze`, `style-dna`, `items:post`) use `failClosed:true` so DB outage returns 429, not unbounded AI cost. | `lib/rate-limit.ts:16`, `lib/api-guard.ts:156`, `app/api/*/route.ts` |
 | 7 | New env vars validated: required in `ALWAYS_REQUIRED` or warned in `validateEnv()` (URL format, enum values like `TRYON_PROVIDER`, `DIRECT_URL`/`TRYON_WORKER_SECRET` warnings). Runs on all runtimes. | `lib/env.ts:70-116`, `instrumentation.ts:6` |
 | 8 | Guard changes ship with tests: streaming, byte-count (emoji), content-type spoof, CSRF (missing/mismatch `Origin`, `Referer` fallback, GET exempt). | `lib/api-guard.test.ts` |
+| 9 | Temporal handoffs: when a route mutates state then delegates (`after()`, worker POST, cron), trace the exact read/write order across the boundary. Capture pre-mutation values at the writer and pass them explicitly — never re-read "previous" state downstream (PR #43 P2: `style-dna` restore read the endpoint's own `PENDING` write). | route `upsert`/`update` + `after()` targets |
+| 10 | Constant coupling: when changing any TTL/limit/quota constant, `grep` all consumers (client caches, retry loops, comments naming the old value, docs) and update them in the same PR. Stale value-comments are findings (PR #43 P2: 10-min signed URLs vs 45-min `tryon-preview` cache). | `grep -rn "60 \* 60\|3600\|1-hour\|1h "` |
 
 ## Verification (same gates as CI)
 
@@ -48,3 +50,4 @@ Plus manual spot checks for the class touched:
 
 - PR #41 (`b80cdb3` + 7 fixups): chunked bypass → streaming cap → byte count → content-type independence → multipart spoof → method scoping → envelope cap → per-route capacity.
 - PR #42 (`0a3053b`, `5013d25`, `dd76b28`): `upgrade-insecure-requests` dev breakage; `/api/readyz` info disclosure.
+- PR #43 (Phase 2 draft): dead `style-dna` restore branch (temporal handoff) → rule 9; TTL/cache coupling (10-min URLs vs 45-min client cache) → rule 10.

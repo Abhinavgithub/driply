@@ -33,6 +33,8 @@ export const POST = withAuth(async (currentUser) => {
 
   // Atomic check-then-write: serializable isolation prevents two concurrent
   // requests from both passing the in-progress / cooldown guards before either writes.
+  // Capture the pre-write status for the worker (rule 9): see route.ts above.
+  let preStatus: string | null = null;
   try {
     await prisma.$transaction(
       async (tx) => {
@@ -50,6 +52,7 @@ export const POST = withAuth(async (currentUser) => {
         if (txExisting?.textStatus === "PENDING" || txExisting?.textStatus === "GENERATING") {
           throw new DnaInProgressError();
         }
+        preStatus = txExisting?.textStatus ?? null;
 
         // Skip cooldown only if the previous run explicitly failed.
         const bypassCooldown = txExisting?.textStatus === "FAILED";
@@ -111,7 +114,7 @@ export const POST = withAuth(async (currentUser) => {
   }
 
   after(async () => {
-    await generateStyleDnaForUser(userId, "manual");
+    await generateStyleDnaForUser(userId, "manual", preStatus);
   });
 
   return NextResponse.json({ status: "generating" });

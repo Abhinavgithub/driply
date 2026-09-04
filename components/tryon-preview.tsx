@@ -35,10 +35,14 @@ type Phase = "idle" | "loading" | "success" | "fallback";
 type CacheEntry = {
   imageUrl: string;
   mimeType: string;
+  jobId: string;
   createdAt: number;
 };
 
-const SESSION_CACHE_TTL_MS = 45 * 60 * 1000; // 45 min — before 1h signed-URL expiry
+// 45-min session window (avoids repeat AI generations); signed result URLs
+// themselves expire after 10 min, so entries are re-signed on reuse via
+// GET /api/tryon?jobId= (rule 10) rather than served verbatim.
+const SESSION_CACHE_TTL_MS = 45 * 60 * 1000;
 
 // Module-level session cache — survives component remounts within same browser
 // session.
@@ -62,6 +66,33 @@ function getCachedEntry(key: string): CacheEntry | null {
     return null;
   }
   return entry;
+}
+
+/**
+ * Re-signs a cached entry: the stored signed URL expires after 10 min, so a
+ * cache hit re-polls the (cheap, no-AI) job endpoint for a fresh URL instead
+ * of reusing a stale one. Returns null when the job is gone — the caller
+ * falls through to a full regeneration.
+ */
+async function refreshCachedEntry(key: string, entry: CacheEntry): Promise<CacheEntry | null> {
+  try {
+    const res = await fetch(`/api/tryon?jobId=${encodeURIComponent(entry.jobId)}`);
+    const poll = await res.json();
+    if (res.ok && poll.status === "ready" && poll.imageUrl) {
+      const fresh: CacheEntry = {
+        imageUrl: poll.imageUrl,
+        mimeType: poll.mimeType ?? entry.mimeType,
+        jobId: entry.jobId,
+        createdAt: Date.now(),
+      };
+      sessionCache.set(key, fresh);
+      return fresh;
+    }
+  } catch {
+    // Network failure — treat like a stale entry below.
+  }
+  sessionCache.delete(key);
+  return null;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -100,7 +131,7 @@ async function generateViaJob(
     if (isCancelled()) return null;
 
     if (poll.status === "ready" && poll.imageUrl) {
-      return { imageUrl: poll.imageUrl, mimeType: poll.mimeType ?? "image/png" };
+      return { imageUrl: poll.imageUrl, mimeType: poll.mimeType ?? "image/png", jobId: json.jobId };
     }
     if (poll.status === "failed" || pollRes.status === 404) {
       throw new Error(poll?.reason || "generation_failed");
@@ -178,10 +209,17 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
     const cacheKey = makeCacheKey(outfit, userKey);
     const cached = getCachedEntry(cacheKey);
     if (cached) {
-      setImageUrl(cached.imageUrl);
-      setImageMimeType(cached.mimeType);
-      setPhase("success");
-      return;
+      // Re-sign before reuse: the cached URL may have expired (10-min TTL).
+      setPhase("loading");
+      const fresh = await refreshCachedEntry(cacheKey, cached);
+      if (cancelledRef.current) return;
+      if (fresh) {
+        setImageUrl(fresh.imageUrl);
+        setImageMimeType(fresh.mimeType);
+        setPhase("success");
+        return;
+      }
+      // Job gone (pruned/failed) — fall through to a full regeneration.
     }
 
     setPhase("loading");

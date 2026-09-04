@@ -139,6 +139,10 @@ export async function getStyleDnaStatus(userId: string): Promise<StyleDnaStatus 
 export async function generateStyleDnaForUser(
   userId: string,
   trigger: "onboarding" | "manual" | "wardrobe_update" = "manual",
+  // Pre-handoff status captured by the calling endpoint BEFORE it writes
+  // PENDING (rule 9): reading it here would only ever see the endpoint's own
+  // write. Falls back to an internal read for direct callers.
+  preStatus: string | null = null,
 ): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -154,11 +158,14 @@ export async function generateStyleDnaForUser(
   // Atomic version bump (no read-modify-write lost update) and keep-old:
   // regenerating must not wipe prior READY data — getStyleDnaStatus hides
   // non-READY rows, so clearing fields here would blank the UI on failure.
+  // NOTE: preStatus must come from the caller (see param) — by the time this
+  // runs, the endpoint has already written PENDING.
+  let restoreStatus = preStatus;
   const prev = await prisma.styleDNA.findUnique({
     where: { userId },
     select: { textStatus: true },
   });
-  const prevStatus = prev?.textStatus ?? null;
+  if (restoreStatus === null) restoreStatus = prev?.textStatus ?? null;
   if (prev) {
     await prisma.styleDNA.update({
       where: { userId },
@@ -221,7 +228,7 @@ export async function generateStyleDnaForUser(
     // READY data (kept intact above). Surface errors instead of swallowing.
     await prisma.styleDNA.update({
       where: { userId },
-      data: { textStatus: prevStatus === "READY" ? "READY" : "FAILED" },
+      data: { textStatus: restoreStatus === "READY" ? "READY" : "FAILED" },
     });
     await prisma.user.update({ where: { id: userId }, data: { lastDnaRegenAt: null } });
   }

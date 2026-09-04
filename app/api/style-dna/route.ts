@@ -38,6 +38,9 @@ export const POST = withAuth(async (currentUser) => {
 
   // Atomic check-then-upsert: serializable isolation prevents two concurrent
   // requests from both passing the in-progress guard before either writes.
+  // Capture the pre-write status for the worker: it restores READY on failure,
+  // but can only see our own PENDING write by the time it runs (rule 9).
+  let preStatus: string | null = null;
   try {
     await prisma.$transaction(
       async (tx) => {
@@ -48,6 +51,7 @@ export const POST = withAuth(async (currentUser) => {
         if (existing?.textStatus === "PENDING" || existing?.textStatus === "GENERATING") {
           throw new DnaInProgressError();
         }
+        preStatus = existing?.textStatus ?? null;
         await tx.styleDNA.upsert({
           where: { userId },
           create: {
@@ -84,7 +88,7 @@ export const POST = withAuth(async (currentUser) => {
   }
 
   after(async () => {
-    await generateStyleDnaForUser(userId, "onboarding");
+    await generateStyleDnaForUser(userId, "onboarding", preStatus);
   });
 
   return NextResponse.json({ status: "generating" });
