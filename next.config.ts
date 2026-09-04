@@ -9,6 +9,8 @@ const isDev = process.env.NODE_ENV !== "production";
 // 'unsafe-inline' for scripts is required by Next.js bootstrap scripts (no nonce
 // setup); dev additionally needs 'unsafe-eval' and websockets for Fast Refresh.
 // Phase 1 hardens headers without full nonce migration (tradeoff 3).
+// upgrade-insecure-requests is production-only: under `next dev` (plain HTTP)
+// it would rewrite /api/* to https://localhost and break local fetches (Codex P2).
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
@@ -23,7 +25,7 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
+  ...(isDev ? [] : ["upgrade-insecure-requests"]),
 ].join("; ");
 
 const nextConfig: NextConfig = {
@@ -37,10 +39,16 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "Content-Security-Policy", value: contentSecurityPolicy },
-          {
-            key: "Strict-Transport-Security",
-            value: "max-age=63072000; includeSubDomains; preload",
-          },
+          // HSTS is production-only: browsers ignore it over HTTP, and emitting
+          // it in dev risks pinning https://localhost with self-signed certs.
+          ...(isDev
+            ? []
+            : [
+                {
+                  key: "Strict-Transport-Security",
+                  value: "max-age=63072000; includeSubDomains; preload",
+                },
+              ]),
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
