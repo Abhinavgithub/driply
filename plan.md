@@ -70,7 +70,9 @@ Shipped: de-nested onboarding buttons, hero keyboard tiles, location `<form>`; g
 
 Shipped: proxy `:path*` + fail-open errors; browser env fail-fast (hotfixed post-merge: literal `NEXT_PUBLIC_*` access — dynamic reads don't inline); CSP origin pinning; CSS guard hardening. Preflight rule 13 born here.
 
-### Phase 5 — Automated smoke + a11y suite — IN REVIEW (PR #46)
+### Phase 5 — Automated smoke + a11y suite — MERGED (`65320ae` PR #46)
+
+Shipped: Playwright smoke (health/proxy/headers, 11 specs) + public-pages axe (4 specs, reduced-motion emulation) + CI `e2e` job (green 1m37s first run); `--lp-muted` 45%→60% real finding; fail-meaningfully proof recorded. Follow-ups: authenticated axe fixture, CSP nonce.
 
 - **A. Playwright smoke** (`tests/smoke/`, chromium-only, `webServer` on `next start`): `health.spec.ts` (`/api/health` 200, `/api/readyz` shape), `proxy.spec.ts` (307 matrix + `/profile` 200), `headers.spec.ts` (pinned CSP, no `data:`, HSTS, geolocation override, DNS-off)
 - **B. Axe, public pages only** (`/`, `/sign-in`, `/sign-up`, `/forgot-password` [+ `/reset-password` if routable]): gate zero serious/critical; authenticated pages deferred (needs seeded-user fixture — follow-up)
