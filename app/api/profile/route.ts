@@ -15,32 +15,35 @@ const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const DisplayNameSchema = z.string().trim().min(1).max(80);
 
-export const GET = withAuth(async (currentUser) => {
-  const user = await prisma.user.findUnique({
-    where: { id: currentUser.appUser.id },
-    select: {
-      displayName: true,
-      uploadedAvatarUrl: true,
-      aiTryOnPhotoUrl: true,
-      aiTryOnPhotoMimeType: true,
-      stylePreferences: true,
-    },
-  });
+export const GET = withAuth(
+  async (currentUser) => {
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.appUser.id },
+      select: {
+        displayName: true,
+        uploadedAvatarUrl: true,
+        aiTryOnPhotoUrl: true,
+        aiTryOnPhotoMimeType: true,
+        stylePreferences: true,
+      },
+    });
 
-  const [avatarSignedUrl, tryOnSignedUrl] = await Promise.all([
-    getSignedProfilePhotoUrl(user?.uploadedAvatarUrl),
-    getSignedProfilePhotoUrl(user?.aiTryOnPhotoUrl),
-  ]);
+    const [avatarSignedUrl, tryOnSignedUrl] = await Promise.all([
+      getSignedProfilePhotoUrl(user?.uploadedAvatarUrl),
+      getSignedProfilePhotoUrl(user?.aiTryOnPhotoUrl),
+    ]);
 
-  return NextResponse.json({
-    id: currentUser.appUser.id,
-    displayName: user?.displayName ?? null,
-    avatarUrl: avatarSignedUrl,
-    aiTryOnPhotoUrl: tryOnSignedUrl,
-    hasTryOnPhoto: Boolean(user?.aiTryOnPhotoUrl),
-    stylePreferences: parseStylePreferences(user?.stylePreferences),
-  });
-});
+    return NextResponse.json({
+      id: currentUser.appUser.id,
+      displayName: user?.displayName ?? null,
+      avatarUrl: avatarSignedUrl,
+      aiTryOnPhotoUrl: tryOnSignedUrl,
+      hasTryOnPhoto: Boolean(user?.aiTryOnPhotoUrl),
+      stylePreferences: parseStylePreferences(user?.stylePreferences),
+    });
+  },
+  { key: (u) => `profile:get:${u.appUser.id}`, max: 30 },
+);
 
 export const PATCH = withAuth(
   async (currentUser, req) => {
@@ -178,5 +181,5 @@ export const PATCH = withAuth(
       hasTryOnPhoto: Boolean(updated.aiTryOnPhotoUrl),
     });
   },
-  { key: (u) => `profile:patch:${u.appUser.id}`, max: 10 },
+  { key: (u) => `profile:patch:${u.appUser.id}`, max: 10, failClosed: true },
 );

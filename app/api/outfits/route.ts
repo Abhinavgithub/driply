@@ -18,56 +18,59 @@ const DeleteSchema = z.object({
   id: z.string().min(1),
 });
 
-export const GET = withAuth(async (currentUser, req) => {
-  // Accept the client's local date so the 7-day window is anchored to the
-  // user's local day, not UTC (avoids off-by-one near UTC midnight).
-  const localDate = new URL(req.url).searchParams.get("date");
-  const anchorKey = localDate?.match(/^\d{4}-\d{2}-\d{2}$/)
-    ? localDate
-    : new Date().toISOString().slice(0, 10);
-  const anchor = dateKeyToUtcStart(anchorKey);
-  const sevenDaysAgo = new Date(anchor);
-  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+export const GET = withAuth(
+  async (currentUser, req) => {
+    // Accept the client's local date so the 7-day window is anchored to the
+    // user's local day, not UTC (avoids off-by-one near UTC midnight).
+    const localDate = new URL(req.url).searchParams.get("date");
+    const anchorKey = localDate?.match(/^\d{4}-\d{2}-\d{2}$/)
+      ? localDate
+      : new Date().toISOString().slice(0, 10);
+    const anchor = dateKeyToUtcStart(anchorKey);
+    const sevenDaysAgo = new Date(anchor);
+    sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
 
-  const records = await prisma.outfitHistory.findMany({
-    where: {
-      userId: currentUser.appUser.id,
-      date: { gte: sevenDaysAgo },
-    },
-    select: { id: true, date: true, topItemId: true, bottomItemId: true, shoeItemId: true },
-    orderBy: { date: "asc" },
-  });
+    const records = await prisma.outfitHistory.findMany({
+      where: {
+        userId: currentUser.appUser.id,
+        date: { gte: sevenDaysAgo },
+      },
+      select: { id: true, date: true, topItemId: true, bottomItemId: true, shoeItemId: true },
+      orderBy: { date: "asc" },
+    });
 
-  const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
+    const dateKeys = records.map((r) => r.date.toISOString().slice(0, 10));
 
-  // Fetch item photo paths for the history detail bottom sheet. Ids are null
-  // for items deleted since the outfit was worn.
-  const allItemIds = [
-    ...new Set(
-      records
-        .flatMap((r) => [r.topItemId, r.bottomItemId, r.shoeItemId])
-        .filter((id): id is string => id !== null),
-    ),
-  ];
-  const items = allItemIds.length
-    ? await prisma.item.findMany({
-        where: { id: { in: allItemIds }, userId: currentUser.appUser.id },
-        select: { id: true, photoUrl: true, kind: true },
-      })
-    : [];
-  const signedItems = await attachSignedPhotoUrls(items);
-  const photoById = new Map(signedItems.map((i) => [i.id, i.photoUrl]));
+    // Fetch item photo paths for the history detail bottom sheet. Ids are null
+    // for items deleted since the outfit was worn.
+    const allItemIds = [
+      ...new Set(
+        records
+          .flatMap((r) => [r.topItemId, r.bottomItemId, r.shoeItemId])
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const items = allItemIds.length
+      ? await prisma.item.findMany({
+          where: { id: { in: allItemIds }, userId: currentUser.appUser.id },
+          select: { id: true, photoUrl: true, kind: true },
+        })
+      : [];
+    const signedItems = await attachSignedPhotoUrls(items);
+    const photoById = new Map(signedItems.map((i) => [i.id, i.photoUrl]));
 
-  const history = records.map((r) => ({
-    id: r.id,
-    dateKey: r.date.toISOString().slice(0, 10),
-    topPhotoUrl: (r.topItemId && photoById.get(r.topItemId)) || null,
-    bottomPhotoUrl: (r.bottomItemId && photoById.get(r.bottomItemId)) || null,
-    shoePhotoUrl: (r.shoeItemId && photoById.get(r.shoeItemId)) || null,
-  }));
+    const history = records.map((r) => ({
+      id: r.id,
+      dateKey: r.date.toISOString().slice(0, 10),
+      topPhotoUrl: (r.topItemId && photoById.get(r.topItemId)) || null,
+      bottomPhotoUrl: (r.bottomItemId && photoById.get(r.bottomItemId)) || null,
+      shoePhotoUrl: (r.shoeItemId && photoById.get(r.shoeItemId)) || null,
+    }));
 
-  return NextResponse.json({ dateKeys, history });
-});
+    return NextResponse.json({ dateKeys, history });
+  },
+  { key: (u) => `outfits:get:${u.appUser.id}`, max: 30 },
+);
 
 export const POST = withAuth(
   async (currentUser, req) => {
@@ -115,7 +118,7 @@ export const POST = withAuth(
       throw err;
     }
   },
-  { key: (u) => `outfits:post:${u.appUser.id}`, max: 30 },
+  { key: (u) => `outfits:post:${u.appUser.id}`, max: 30, failClosed: true },
 );
 
 export const DELETE = withAuth(
@@ -138,5 +141,5 @@ export const DELETE = withAuth(
     await prisma.outfitHistory.delete({ where: { id: record.id } });
     return NextResponse.json({ ok: true });
   },
-  { key: (u) => `outfits:delete:${u.appUser.id}`, max: 20 },
+  { key: (u) => `outfits:delete:${u.appUser.id}`, max: 20, failClosed: true },
 );

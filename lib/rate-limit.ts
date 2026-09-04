@@ -10,10 +10,15 @@ const PRUNE_OLDER_THAN_MS = 10 * 60 * 1000;
  * atomic statement; concurrent requests cannot double-count or reset a live
  * window.
  *
- * Fails open on database errors: an unavailable limiter should degrade to
- * "no limit", not take every guarded endpoint down with it.
+ * Tiered fail mode (Phase 1): cost-sensitive writes (tryon, analyze, style-dna, items:post)
+ * fail-closed (return false -> 429) on DB error to avoid unbounded AI cost. Idempotent reads
+ * fail-open (return true) to keep the app usable during transient DB outage.
  */
-export async function checkRateLimit(key: string, maxPerMinute: number): Promise<boolean> {
+export async function checkRateLimit(
+  key: string,
+  maxPerMinute: number,
+  options?: { failClosed?: boolean },
+): Promise<boolean> {
   try {
     const rows = await prisma.$queryRaw<Array<{ count: number }>>`
       INSERT INTO "RateLimit" ("key", "count", "windowStart")
@@ -40,10 +45,20 @@ export async function checkRateLimit(key: string, maxPerMinute: number): Promise
 
     return (rows[0]?.count ?? 1) <= maxPerMinute;
   } catch (error) {
-    console.warn("[rate-limit] check failed, allowing request", {
+    const failClosed = options?.failClosed ?? false;
+    if (failClosed) {
+      console.error("[rate-limit] check failed, failing closed (cost-sensitive)", {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+    console.warn("[rate-limit] check failed, allowing request (fail-open for read)", {
       key,
       error: error instanceof Error ? error.message : String(error),
     });
+    // Extend windowStart handling by avoiding immediate retry storm: caller will not prune,
+    // but next check would still hit DB. No extra delay needed here as fail-open preserves availability.
     return true;
   }
 }
