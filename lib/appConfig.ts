@@ -10,7 +10,10 @@ let cache: Record<string, string> | null = null;
 let cacheExpiresAt = 0;
 const CACHE_TTL_MS = 60_000; // 60 seconds
 // Short backoff after a failed refresh so every request during a DB outage
-// doesn't hammer findMany (P1-2).
+// doesn't hammer findMany (P1-2). Tracked separately from cacheExpiresAt:
+// on a cold-start outage cache stays null, so a cache-coupled expiry would
+// never engage and every call would retry the DB (P2).
+let errorBackoffUntil = 0;
 const ERROR_BACKOFF_MS = 5_000;
 // Singleflight: concurrent refreshes share one DB round-trip instead of each
 // firing findMany when the cache expires (P1-2 thundering herd).
@@ -24,7 +27,10 @@ let inflightRefresh: Promise<Record<string, string>> | null = null;
  */
 export async function getConfig(key: string): Promise<string | undefined> {
   const now = Date.now();
-  if (!cache || now >= cacheExpiresAt) {
+  // Warm path uses the cache TTL; cold path (no cache yet) uses the
+  // independent error backoff so a startup outage doesn't retry per request.
+  const needsRefresh = cache ? now >= cacheExpiresAt : now >= errorBackoffUntil;
+  if (needsRefresh) {
     if (!inflightRefresh) {
       inflightRefresh = (async () => {
         const rows = await prisma.appConfig.findMany({ select: { key: true, value: true } });
@@ -46,13 +52,15 @@ export async function getConfig(key: string): Promise<string | undefined> {
     } catch {
       // DB unavailable — prefer stale cache over env defaults so a transient
       // outage doesn't flip feature flags. Fall back to process.env only on
-      // a cold start where no cache has been loaded yet. Extend the expiry
-      // briefly so we don't retry the DB on every request during an outage.
-      cacheExpiresAt = Date.now() + ERROR_BACKOFF_MS;
-      if (cache !== null) return cache[key] ?? process.env[key];
+      // a cold start where no cache has been loaded yet.
+      if (cache !== null) {
+        cacheExpiresAt = Date.now() + ERROR_BACKOFF_MS;
+        return cache[key] ?? process.env[key];
+      }
+      errorBackoffUntil = Date.now() + ERROR_BACKOFF_MS;
       return process.env[key];
     }
   }
   // env var is the ultimate fallback if the key is absent from the DB table
-  return cache[key] ?? process.env[key];
+  return cache?.[key] ?? process.env[key];
 }

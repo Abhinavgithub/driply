@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
+import { ProfilePhotoImg } from "@/components/profile-photo";
 import { StyleDnaCard } from "@/components/style-dna-card";
 import { ApiError, isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
@@ -316,9 +317,9 @@ export default function ProfilePage() {
               className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border border-border bg-surface transition hover:opacity-80"
             >
               {effectiveAvatarSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <ProfilePhotoImg
                   src={effectiveAvatarSrc}
+                  pick="avatar"
                   alt="Profile picture"
                   className="h-full w-full object-cover"
                 />
@@ -494,9 +495,9 @@ export default function ProfilePage() {
 
           {effectiveTryOnSrc ? (
             <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-subtle">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <ProfilePhotoImg
                 src={effectiveTryOnSrc}
+                pick="tryon"
                 alt="AI try-on photo preview"
                 className="mx-auto max-h-72 w-auto object-contain"
               />

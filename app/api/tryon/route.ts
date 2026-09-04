@@ -71,6 +71,24 @@ export const POST = withAuth(
       return NextResponse.json({ error: "One or more items not found." }, { status: 404 });
     }
 
+    // Release dead workers' slots first: a PENDING/RUNNING job older than the
+    // stale threshold will never complete (GET reports timed_out without
+    // changing status), and the partial unique index would otherwise make
+    // every retry collide and return the same unusable row forever (P1).
+    const staleCutoff = new Date(Date.now() - JOB_STALE_AFTER_MS);
+    await prisma.tryOnJob.updateMany({
+      where: {
+        userId,
+        topItemId,
+        bottomItemId,
+        shoeItemId,
+        provider: providerEnum,
+        status: { in: ["PENDING", "RUNNING"] },
+        createdAt: { lt: staleCutoff },
+      },
+      data: { status: "FAILED", errorCode: "timed_out", completedAt: new Date() },
+    });
+
     // The client retries on failure; reuse an in-flight job for the same
     // outfit instead of spawning a duplicate generation.
     const existing = await prisma.tryOnJob.findFirst({

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
+import { ProfilePhotoImg } from "@/components/profile-photo";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { useAuthUser } from "@/lib/hooks/use-auth-user";
 import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
@@ -288,8 +289,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   }}
                 >
                   {avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+                    <ProfilePhotoImg
+                      src={avatarUrl}
+                      pick="avatar"
+                      alt={displayName}
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     displayName.charAt(0).toUpperCase()
                   )}
