@@ -5,7 +5,7 @@ import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-type CheckResult = { ok: boolean; latencyMs: number; error?: string };
+type CheckResult = { ok: boolean; latencyMs: number; error?: "unavailable" };
 
 async function withTiming<T>(fn: () => Promise<T>): Promise<{ result: T; latencyMs: number }> {
   const start = Date.now();
@@ -22,8 +22,10 @@ export async function GET() {
     const { latencyMs } = await withTiming(() => prisma.$queryRaw`SELECT 1`);
     checks.db = { ok: true, latencyMs };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    checks.db = { ok: false, latencyMs: 0, error: message.slice(0, 200) };
+    console.error("[readyz] db check failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    checks.db = { ok: false, latencyMs: 0, error: "unavailable" };
     overallOk = false;
   }
 
@@ -43,8 +45,10 @@ export async function GET() {
     // Optional: surface public vs private without failing - useful for signed-URL TTL tradeoff
     // but not a readiness gate.
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    checks.storage = { ok: false, latencyMs: 0, error: message.slice(0, 200) };
+    console.error("[readyz] storage check failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    checks.storage = { ok: false, latencyMs: 0, error: "unavailable" };
     overallOk = false;
   }
 
