@@ -16,36 +16,63 @@ export async function proxy(request: NextRequest) {
     request,
   });
 
-  const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
-    auth: {
-      flowType: "pkce",
-    },
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
+  let supabase: ReturnType<typeof createServerClient>;
+  try {
+    supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+      auth: {
+        flowType: "pkce",
       },
-      setAll(cookiesToSet) {
-        for (const { name, value } of cookiesToSet) {
-          request.cookies.set(name, value);
-        }
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          for (const { name, value } of cookiesToSet) {
+            request.cookies.set(name, value);
+          }
 
-        response = NextResponse.next({
-          request,
-        });
+          response = NextResponse.next({
+            request,
+          });
 
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
+          for (const { name, value, options } of cookiesToSet) {
+            response.cookies.set(name, value, options);
+          }
+        },
       },
-    },
-  });
+    });
+  } catch (error) {
+    // Misconfigured env must not 500 every page: degrade to no session and
+    // let client-side 401 handling take over. validateEnv() still fails the
+    // boot loudly via instrumentation.ts.
+    console.warn("[proxy] Supabase client init failed, skipping auth gate", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return response;
+  }
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser();
+  if (error && error.name !== "AuthSessionMissingError") {
+    // Transient failure (network/timeout): do NOT redirect to /sign-in —
+    // that would loop on blips. Fail open; client-side handling covers it.
+    // A merely absent session (logged out) still flows into the redirect
+    // logic below via user === null.
+    console.warn("[proxy] getUser failed, skipping auth gate", { error: error.message });
+    return response;
+  }
 
   const pathname = request.nextUrl.pathname;
-  const isProtected = pathname === "/today" || pathname === "/library";
+  // Prefix match: the matcher (:path*) also covers future sub-routes, so the
+  // gate must not use exact equality (a sub-route would otherwise fall
+  // through to a 404 instead of /sign-in).
+  const isProtected =
+    pathname === "/today" ||
+    pathname.startsWith("/today/") ||
+    pathname === "/library" ||
+    pathname.startsWith("/library/");
   const isSignIn = pathname === "/sign-in";
 
   if (!user && isProtected) {
@@ -65,6 +92,11 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
+// NOTE (auth boundary, deliberate): only /today + /library are server-gated.
+// /profile relies on client-side 401 handling (useApiFetch → /sign-in) and
+// /onboarding is public by design for new users. Revisit if profile gains
+// server-rendered private data. `:path*` also matches the bare path, so this
+// covers future sub-routes (previously exact strings bypassed them).
 export const config = {
-  matcher: ["/today", "/library", "/sign-in"],
+  matcher: ["/today/:path*", "/library/:path*", "/sign-in"],
 };

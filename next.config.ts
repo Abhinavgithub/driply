@@ -6,20 +6,39 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const isDev = process.env.NODE_ENV !== "production";
 
+// Pinned at build time from NEXT_PUBLIC_SUPABASE_URL so a project move or
+// custom domain is picked up automatically. Falls back to the wildcard when
+// the var is absent (e.g. partial local env) so the build never breaks.
+function supabaseOrigin(): string {
+  const raw = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (raw) {
+    try {
+      return new URL(raw).origin;
+    } catch {
+      // fall through to wildcard
+    }
+  }
+  return "https://*.supabase.co";
+}
+
+const supabaseSrc = supabaseOrigin();
+
 // 'unsafe-inline' for scripts is required by Next.js bootstrap scripts (no nonce
 // setup); dev additionally needs 'unsafe-eval' and websockets for Fast Refresh.
 // Phase 1 hardens headers without full nonce migration (tradeoff 3).
 // upgrade-insecure-requests is production-only: under `next dev` (plain HTTP)
 // it would rewrite /api/* to https://localhost and break local fetches (Codex P2).
+// FUTURE: per-request nonce (script-src 'nonce-…' 'strict-dynamic') needs CSP
+// moved into proxy.ts with per-request UUIDs — tracked follow-up, not here.
 const contentSecurityPolicy = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // Supabase Storage signed URLs, Google OAuth avatars, Unsplash (landing
-  // page outfit examples), data:/blob: for upload previews and base64
-  // try-on images.
-  "img-src 'self' https://*.supabase.co https://lh3.googleusercontent.com https://images.unsplash.com data: blob:",
-  `connect-src 'self' https://*.supabase.co${isDev ? " ws:" : ""}`,
+  // page outfit examples), blob: for upload previews. No data: — nothing
+  // renders data: images (verified: previews use createObjectURL).
+  `img-src 'self' ${supabaseSrc} https://lh3.googleusercontent.com https://images.unsplash.com blob:`,
+  `connect-src 'self' ${supabaseSrc}${isDev ? " ws:" : ""}`,
   "font-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
@@ -30,9 +49,9 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
-  turbopack: {
-    root: projectRoot,
-  },
+  // NOTE: no `turbopack` block — package.json pins `--webpack` for dev/build,
+  // so Turbopack config would be dead code. Re-adding Turbopack later must
+  // re-prove `npm run verify:css` (the Style DNA truncation trauma).
   async headers() {
     return [
       {

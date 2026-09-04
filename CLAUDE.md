@@ -33,7 +33,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `/sign-in`, `/sign-up`, `/auth/callback` — auth flow
 - `app/api/` — all API routes (items, recommendations, weather, outfits, location-search, profile, tryon, style-dna)
 
-**Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route.
+**Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route. `proxy.ts` server-gates `/today/*` + `/library/*` (redirect to `/sign-in`) and degrades open on errors; `/profile` relies on client-side 401 handling and `/onboarding` is public by design.
 
 **Client fetch convention:** pages call APIs through `useApiFetch()` (`lib/hooks/use-api-fetch.ts`), which wraps `fetchJson` (`lib/fetch-utils.ts`): throws `ApiError` on non-2xx, aborts in-flight requests on unmount, and redirects to `/sign-in` on 401. Catch blocks bail out early with `isHandledFetchError(e)` before surfacing errors. Item photos render via `<ItemImage>` (`components/item-image.tsx`), which re-fetches a fresh signed URL once on image load failure (signed URLs expire after 10 minutes).
 
