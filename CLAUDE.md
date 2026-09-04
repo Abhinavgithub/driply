@@ -11,13 +11,14 @@ npm run dev        # Start dev server (webpack, localhost:3000) — uses --webpa
 npm run build      # Production build
 npm run lint       # ESLint
 npm test           # Vitest (run once); test:watch for watch mode
+npm run test:e2e   # Playwright smoke + axe (`tests/`, needs `npm run build` first; webServer starts prod server)
 npm run format     # Prettier --write (format:check for CI-style verify)
 npx prisma migrate dev   # Run pending migrations (fails against Supabase — hand-author SQL + migrate deploy instead)
 npx prisma generate      # Regenerate Prisma client after schema changes
 npx prisma studio        # Browse database
 ```
 
-Tests use **Vitest** (`*.test.ts` colocated under `lib/`); current coverage is the pure logic — `lib/recommendation.ts` (scoring/weights/penalties/pagination) and `lib/itemAttributes.ts` (Zod schemas + helpers). `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, `npm test`, the production build, and `npm run verify:css` on PRs and pushes to main. `verify:css` (`scripts/verify-built-css.mjs`) asserts representative selectors survive into the built CSS bundle — it also runs in the Netlify build command, because that environment once silently truncated the tail of `app/globals.css` (dropping the Style DNA styles). A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files).
+Tests use **Vitest** (`*.test.ts` colocated under `lib/`) for pure logic plus **Playwright** (`tests/smoke`, `tests/a11y`, chromium-only) for unauthenticated smoke (health, proxy redirects, security headers) and axe on public pages; authenticated pages need a seeded-user fixture (tracked follow-up). `postinstall` runs `prisma generate` automatically after `npm install`. CI (`.github/workflows/ci.yml`) runs format-check, lint, `tsc --noEmit`, `npm test`, the production build, and `npm run verify:css` on PRs and pushes to main, then a separate `e2e` job (build + `test:e2e`). `verify:css` (`scripts/verify-built-css.mjs`) asserts representative selectors survive into the built CSS bundle — it also runs in the Netlify build command, because that environment once silently truncated the tail of `app/globals.css` (dropping the Style DNA styles). A husky `pre-commit` hook runs `lint-staged` (Prettier on staged files).
 
 **Migrations are applied manually**, not during deploy: the Netlify build runner (and GitHub-hosted runners) are IPv4-only and cannot reach Supabase's direct connection host (`db.<ref>.supabase.co:5432`, IPv6-only on current Supabase plans), so `prisma migrate deploy` fails there with P1001. After a PR with a migration merges, run `npx prisma migrate deploy` from a machine that can reach the DB (the pooler `DATABASE_URL` is IPv4-reachable but the transaction pooler can't run migrations; use the direct `DIRECT_URL` from such a machine, or the Supabase session pooler).
 
