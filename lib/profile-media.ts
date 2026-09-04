@@ -38,9 +38,10 @@ export async function getSignedProfilePhotoUrl(
 ): Promise<string | null> {
   if (!path) return null;
   const supabase = getSupabaseAdminClient();
+  // 10-minute TTL (tradeoff-2): see item-media.ts.
   const { data, error } = await supabase.storage
     .from(getSupabaseStorageBucket())
-    .createSignedUrl(path, 60 * 60);
+    .createSignedUrl(path, 10 * 60);
 
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;

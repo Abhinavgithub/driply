@@ -81,8 +81,12 @@ export const POST = withAuth(
             : item.warmthLevel,
       };
 
-      const updated = await prisma.item.update({
-        where: { id: item.id },
+      // Guarded write: a concurrent analyze that won the race already moved
+      // the row out of PENDING — return the winner instead of overwriting.
+      // userId scoping is defense-in-depth (the findFirst above already
+      // constrains ownership).
+      const claimed = await prisma.item.updateMany({
+        where: { id: item.id, userId: currentUser.appUser.id, analysisStatus: "PENDING" },
         data: {
           kind: resolvedKind,
           subtype: resolvedSubtype,
@@ -98,6 +102,16 @@ export const POST = withAuth(
           analysisErrorCode: null,
         },
       });
+      const updated = await prisma.item.findFirst({
+        where: { id: item.id, userId: currentUser.appUser.id },
+      });
+      if (!updated) {
+        return NextResponse.json({ error: "Item not found." }, { status: 404 });
+      }
+      if (claimed.count === 0) {
+        // Lost the race — the concurrent request's result stands.
+        return NextResponse.json({ ok: true, item: updated, deduped: true });
+      }
 
       return NextResponse.json({ ok: true, item: updated });
     } catch (error) {
@@ -108,8 +122,8 @@ export const POST = withAuth(
         message: getGeminiErrorMessage(error),
       });
 
-      await prisma.item.update({
-        where: { id: item.id },
+      await prisma.item.updateMany({
+        where: { id: item.id, userId: currentUser.appUser.id },
         data: { analysisErrorCode: code },
       });
 

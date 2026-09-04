@@ -35,12 +35,12 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 
 **Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route.
 
-**Client fetch convention:** pages call APIs through `useApiFetch()` (`lib/hooks/use-api-fetch.ts`), which wraps `fetchJson` (`lib/fetch-utils.ts`): throws `ApiError` on non-2xx, aborts in-flight requests on unmount, and redirects to `/sign-in` on 401. Catch blocks bail out early with `isHandledFetchError(e)` before surfacing errors. Item photos render via `<ItemImage>` (`components/item-image.tsx`), which re-fetches a fresh signed URL once on image load failure (signed URLs expire after 1 hour).
+**Client fetch convention:** pages call APIs through `useApiFetch()` (`lib/hooks/use-api-fetch.ts`), which wraps `fetchJson` (`lib/fetch-utils.ts`): throws `ApiError` on non-2xx, aborts in-flight requests on unmount, and redirects to `/sign-in` on 401. Catch blocks bail out early with `isHandledFetchError(e)` before surfacing errors. Item photos render via `<ItemImage>` (`components/item-image.tsx`), which re-fetches a fresh signed URL once on image load failure (signed URLs expire after 10 minutes).
 
 **API route conventions:**
 - All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`)
 - POST/PATCH routes validate with Zod schemas; validation failures return 400
-- Item and profile photos are always served as signed URLs (1-hour expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
+- Item, profile, and try-on photos are always served as signed URLs (10-minute expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
 - Two recommendation endpoints: `GET /api/recommendation` (singular, single outfit + debug scores for `/today`) vs `GET /api/recommendations` (plural, paginated carousel)
 - Failed item analysis can be retried via `POST /api/items/analyze` with `{ itemId }` in the body (only items with `analysisStatus: PENDING`)
 - `GET /api/items?ids=a,b,c` narrows to specific items (used to mint fresh signed photo URLs)

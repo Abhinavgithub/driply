@@ -21,7 +21,15 @@
   node_bundler = "esbuild"
 
 # The try-on worker imports the app's lib/ modules, which pull in native and
-# generated packages that esbuild must not inline.
+# generated packages that esbuild must not inline (@prisma/adapter-pg and pg
+# have native bindings; inlining them crashes the worker on cold start).
 [functions."tryon-process-background"]
-  external_node_modules = ["sharp", "@prisma/client", "openai", "@huggingface/inference"]
-  included_files = ["node_modules/.prisma/**", "prisma/schema.prisma"]
+  external_node_modules = [
+    "sharp",
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+    "openai",
+    "@huggingface/inference",
+  ]
+  included_files = ["node_modules/.prisma/**", "node_modules/@prisma/**", "prisma/schema.prisma"]

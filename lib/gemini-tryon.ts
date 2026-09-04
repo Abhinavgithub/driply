@@ -58,16 +58,24 @@ export function normalizeTryOnErrorCode(error: unknown): string {
 }
 
 async function resizeToJpeg(bytes: Buffer, maxDimension: number): Promise<string> {
-  const resized = await sharp(bytes, { animated: false })
-    .rotate()
-    .resize({
-      width: maxDimension,
-      height: maxDimension,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .jpeg({ quality: 80, mozjpeg: true })
-    .toBuffer();
+  let resized: Buffer;
+  try {
+    resized = await sharp(bytes, { animated: false })
+      .rotate()
+      .resize({
+        width: maxDimension,
+        height: maxDimension,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+  } catch (error) {
+    throw new TryOnApiError(
+      `Image preprocessing failed: ${error instanceof Error ? error.message : String(error)}`,
+      "IMAGE_PROCESSING_ERROR",
+    );
+  }
 
   return resized.toString("base64");
 }

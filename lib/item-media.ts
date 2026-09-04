@@ -12,9 +12,11 @@ export async function attachSignedPhotoUrls<T extends ItemWithPath>(items: T[]):
   if (!uniquePaths.length) return items;
 
   const supabase = getSupabaseAdminClient();
+  // 10-minute TTL (tradeoff-2): bounds the exposure window of leaked URLs;
+  // ItemImage refreshes on expiry via GET /api/items?ids=.
   const { data, error } = await supabase.storage
     .from(getSupabaseStorageBucket())
-    .createSignedUrls(uniquePaths, 60 * 60);
+    .createSignedUrls(uniquePaths, 10 * 60);
 
   if (error || !data) {
     return items.map((item) => ({ ...item, photoUrl: "" }));

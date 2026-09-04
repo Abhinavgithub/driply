@@ -1,5 +1,6 @@
 import { after } from "next/server";
 
+import { getAppUrl, getTryOnWorkerSecret } from "@/lib/env";
 import { processTryOnJob } from "@/lib/tryon-job";
 
 // Kept separate from lib/tryon-job.ts so the Netlify background function can
@@ -12,13 +13,18 @@ import { processTryOnJob } from "@/lib/tryon-job";
  * post-response processing via after().
  */
 export async function triggerTryOnJobProcessing(jobId: string): Promise<void> {
-  const secret = process.env.TRYON_WORKER_SECRET?.trim();
-  // URL is one of the few read-only env vars Netlify exposes to functions at
-  // runtime (NETLIFY, CONTEXT, DEPLOY_URL etc. are build-time only — see
-  // docs.netlify.com/functions/environment-variables). It is absent in plain
-  // local dev, so this gate also keeps localhost on the after() path; running
-  // under `netlify dev` sets it and emulates the worker.
-  const base = process.env.URL?.trim();
+  const secret = getTryOnWorkerSecret();
+  // Prefer the canonical app URL (custom domain); fall back to Netlify's
+  // runtime deploy URL. Absent in plain local dev, so the gate below also
+  // keeps localhost on the after() path; `netlify dev` sets URL and emulates
+  // the worker. (NETLIFY, CONTEXT, DEPLOY_URL etc. are build-time only.)
+  let base: string | undefined;
+  try {
+    base = getAppUrl();
+  } catch {
+    base = undefined;
+  }
+  if (!base) base = process.env.URL?.trim() || undefined;
 
   if (secret && base) {
     try {
@@ -35,11 +41,20 @@ export async function triggerTryOnJobProcessing(jobId: string): Promise<void> {
         status: res.status,
       });
     } catch (error) {
-      console.warn("[tryon-trigger] worker unreachable, falling back to after()", {
-        jobId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      const timedOut =
+        error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      console.warn(
+        timedOut
+          ? "[tryon-trigger] worker ack timed out after 5s, falling back to after()"
+          : "[tryon-trigger] worker unreachable, falling back to after()",
+        {
+          jobId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
+  } else if (!secret) {
+    console.warn("[tryon-trigger] TRYON_WORKER_SECRET unset, using after() fallback", { jobId });
   }
 
   after(() => processTryOnJob(jobId));
