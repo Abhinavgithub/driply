@@ -5,12 +5,27 @@ export type TryOnPromptItem = {
   visualSummary?: string | null;
 };
 
+const MAX_SUMMARY_CHARS = 120;
+
+function sanitizeSummary(summary: string | null | undefined): string | null {
+  if (!summary) return null;
+  // Strip control characters and prompt-injection delimiters; keep Unicode
+  // letters so international text survives. Cap length for token budget.
+  const cleaned = summary
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[{}\\"`]/g, "")
+    .trim()
+    .slice(0, MAX_SUMMARY_CHARS)
+    .trim();
+  return cleaned || null;
+}
+
 function buildItemDescriptions(items: readonly TryOnPromptItem[]): string {
   return items
     .map((item) => {
       const color = item.colorFamily !== "UNKNOWN" ? item.colorFamily.toLowerCase() : null;
       const subtype = item.subtype.replaceAll("_", " ");
-      const summary = item.visualSummary?.trim();
+      const summary = sanitizeSummary(item.visualSummary);
       const base = [color, subtype].filter(Boolean).join(" ");
       return summary ? `${base} (${summary})` : base;
     })
@@ -22,9 +37,12 @@ export function buildTryOnPrompt(args: {
   displayName?: string | null;
   items: readonly TryOnPromptItem[];
 }): string {
+  // Unicode-aware allowlist: keep letters/marks/numbers/punctuation so
+  // international names survive; strip control chars and injection syntax.
   const name =
     (args.displayName?.trim() || "the person")
-      .replace(/[^A-Za-z0-9 '\-.,]/g, "")
+      .replace(/[\u0000-\u001F\u007F]/g, "")
+      .replace(/[^\p{L}\p{M}\p{N} '\-.,]/gu, "")
       .slice(0, 40)
       .trim() || "the person";
   const outfitDescription = buildItemDescriptions(args.items);

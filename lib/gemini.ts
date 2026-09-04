@@ -227,7 +227,9 @@ function getTextResponse(json: GeminiApiResponse, task?: string) {
     text = text.slice(firstBrace, lastBrace + 1);
   }
 
-  if (process.env.DEBUG_GEMINI === "1" || process.env.NODE_ENV !== "production") {
+  // Explicit flag only: raw model output can contain user image-derived data
+  // and must never hit stdout via the non-prod default (G-06).
+  if (process.env.DEBUG_GEMINI === "1") {
     console.info(`[gemini:${task ?? "unknown"}] raw_response:`, text.slice(0, 500));
   }
 
@@ -275,80 +277,111 @@ async function generateStructuredJson<T>(args: {
     throw new GeminiApiError("Missing Gemini API key.", "MISSING_API_KEY");
   }
 
-  const RATE_LIMIT_RETRY_DELAYS_MS = [800, 2000];
-  let lastError: GeminiApiError | undefined;
+  // Retry transient failures with jittered backoff (thundering-herd safe):
+  // 429 gets two retries; 5xx/TIMEOUT get one. Auth/client errors never retry.
+  // Timeouts surface as thrown TimeoutError from AbortSignal.timeout.
+  const RETRY_DELAYS_MS: Record<string, number[]> = {
+    RATE_LIMITED: [800, 2000],
+    UPSTREAM_ERROR: [1000],
+    TIMEOUT: [1000],
+  };
+  let retriesUsed = 0;
 
-  for (let attempt = 0; attempt <= RATE_LIMIT_RETRY_DELAYS_MS.length; attempt++) {
-    if (attempt > 0) {
-      await new Promise((r) => setTimeout(r, RATE_LIMIT_RETRY_DELAYS_MS[attempt - 1]));
+  for (let attempt = 0; ; attempt++) {
+    let code: string;
+    let response: Response | undefined;
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: args.contents,
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseJsonSchema: args.responseJsonSchema,
+              temperature: 0.1,
+              topP: 0.1,
+              maxOutputTokens: args.task === "classification" ? 220 : 600,
+              thinkingConfig: {
+                thinkingBudget: 0,
+              },
+            },
+          }),
+          cache: "no-store",
+          signal: AbortSignal.timeout(args.timeoutMs),
+        },
+      );
+    } catch (error) {
+      // Network failure or AbortSignal.timeout expiry.
+      if (
+        error instanceof Error &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+      ) {
+        code = "TIMEOUT";
+      } else {
+        throw error instanceof Error ? new GeminiApiError(error.message, "UPSTREAM_ERROR") : error;
+      }
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          contents: args.contents,
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseJsonSchema: args.responseJsonSchema,
-            temperature: 0.1,
-            topP: 0.1,
-            maxOutputTokens: args.task === "classification" ? 220 : 600,
-            thinkingConfig: {
-              thinkingBudget: 0,
-            },
-          },
-        }),
-        cache: "no-store",
-        signal: AbortSignal.timeout(args.timeoutMs),
-      },
-    );
-
-    if (response.ok) {
+    if (response?.ok) {
       const json = (await response.json()) as GeminiApiResponse;
       logUsage(args.task, args.model, json.usageMetadata);
       return JSON.parse(getTextResponse(json, args.task)) as T;
     }
 
-    const code =
-      response.status === 401 || response.status === 403
-        ? "UNAUTHORIZED"
-        : response.status === 408
-          ? "TIMEOUT"
-          : response.status === 429
-            ? "RATE_LIMITED"
-            : response.status >= 500
-              ? "UPSTREAM_ERROR"
-              : "BAD_REQUEST";
+    if (response && !response.ok) {
+      code =
+        response.status === 401 || response.status === 403
+          ? "UNAUTHORIZED"
+          : response.status === 408
+            ? "TIMEOUT"
+            : response.status === 429
+              ? "RATE_LIMITED"
+              : response.status >= 500
+                ? "UPSTREAM_ERROR"
+                : "BAD_REQUEST";
+    }
+    const errCode = code!;
     const err = new GeminiApiError(
-      `Gemini request failed with ${response.status}.`,
-      code,
-      response.status,
+      response
+        ? `Gemini request failed with ${response.status}.`
+        : `Gemini request failed (${errCode}).`,
+      errCode,
+      response?.status,
     );
 
-    if (code !== "RATE_LIMITED") throw err;
-    lastError = err;
+    const budget = RETRY_DELAYS_MS[errCode];
+    if (!budget || retriesUsed >= budget.length) throw err;
+    const delayMs = budget[retriesUsed] * (0.8 + Math.random() * 0.4);
+    retriesUsed += 1;
+    await new Promise((r) => setTimeout(r, delayMs));
   }
-
-  throw lastError!;
 }
 
 async function toGeminiThumbnail(imageBytes: Buffer) {
-  const resized = await sharp(imageBytes, { animated: false })
-    .rotate()
-    .resize({
-      width: MAX_IMAGE_DIMENSION,
-      height: MAX_IMAGE_DIMENSION,
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .jpeg({ quality: 72, mozjpeg: true })
-    .toBuffer();
+  let resized: Buffer;
+  try {
+    resized = await sharp(imageBytes, { animated: false })
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_DIMENSION,
+        height: MAX_IMAGE_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 72, mozjpeg: true })
+      .toBuffer();
+  } catch (error) {
+    throw new GeminiApiError(
+      `Image preprocessing failed: ${error instanceof Error ? error.message : String(error)}`,
+      "IMAGE_PROCESSING_ERROR",
+    );
+  }
 
   return {
     mimeType: "image/jpeg",

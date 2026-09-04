@@ -1,3 +1,4 @@
+import { Prisma, TryOnProvider } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -49,6 +50,9 @@ export const POST = withAuth(
 
     const userId = currentUser.appUser.id;
     const { topItemId, bottomItemId, shoeItemId } = parsed.data;
+    // Prisma enum (P1-3); the lib provider is already constrained to the
+    // three known values by getTryOnProvider().
+    const providerEnum = TryOnProvider[provider.toUpperCase() as keyof typeof TryOnProvider];
 
     const userRecord = await prisma.user.findUnique({
       where: { id: userId },
@@ -67,6 +71,24 @@ export const POST = withAuth(
       return NextResponse.json({ error: "One or more items not found." }, { status: 404 });
     }
 
+    // Release dead workers' slots first: a PENDING/RUNNING job older than the
+    // stale threshold will never complete (GET reports timed_out without
+    // changing status), and the partial unique index would otherwise make
+    // every retry collide and return the same unusable row forever (P1).
+    const staleCutoff = new Date(Date.now() - JOB_STALE_AFTER_MS);
+    await prisma.tryOnJob.updateMany({
+      where: {
+        userId,
+        topItemId,
+        bottomItemId,
+        shoeItemId,
+        provider: providerEnum,
+        status: { in: ["PENDING", "RUNNING"] },
+        createdAt: { lt: staleCutoff },
+      },
+      data: { status: "FAILED", errorCode: "timed_out", completedAt: new Date() },
+    });
+
     // The client retries on failure; reuse an in-flight job for the same
     // outfit instead of spawning a duplicate generation.
     const existing = await prisma.tryOnJob.findFirst({
@@ -75,7 +97,7 @@ export const POST = withAuth(
         topItemId,
         bottomItemId,
         shoeItemId,
-        provider,
+        provider: providerEnum,
         status: { in: ["PENDING", "RUNNING"] },
         createdAt: { gte: new Date(Date.now() - JOB_STALE_AFTER_MS) },
       },
@@ -88,14 +110,40 @@ export const POST = withAuth(
 
     await pruneOldTryOnJobs(userId).catch(() => {});
 
-    const job = await prisma.tryOnJob.create({
-      data: { userId, topItemId, bottomItemId, shoeItemId, provider },
-      select: { id: true },
-    });
+    // Race-proof: concurrent POSTs that both miss `existing` collide on the
+    // partial unique index (TryOnJob_inflight_outfit_idx); the loser reuses
+    // the winner instead of spawning a duplicate generation (P1-4).
+    let jobId: string;
+    try {
+      const job = await prisma.tryOnJob.create({
+        data: { userId, topItemId, bottomItemId, shoeItemId, provider: providerEnum },
+        select: { id: true },
+      });
+      jobId = job.id;
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const winner = await prisma.tryOnJob.findFirst({
+          where: {
+            userId,
+            topItemId,
+            bottomItemId,
+            shoeItemId,
+            provider: providerEnum,
+            status: { in: ["PENDING", "RUNNING"] },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+        if (winner) {
+          return NextResponse.json({ ok: true, jobId: winner.id, status: "pending" });
+        }
+      }
+      throw err;
+    }
 
-    await triggerTryOnJobProcessing(job.id);
+    await triggerTryOnJobProcessing(jobId);
 
-    return NextResponse.json({ ok: true, jobId: job.id, status: "pending" });
+    return NextResponse.json({ ok: true, jobId, status: "pending" });
   },
   { key: (u) => `tryon:post:${u.appUser.id}`, max: 10, failClosed: true },
 );
@@ -125,7 +173,8 @@ export const GET = withAuth(
         status: "ready",
         imageUrl,
         mimeType: job.resultMimeType ?? "image/png",
-        provider: job.provider,
+        // Lowercase keeps the pre-enum API shape stable for clients.
+        provider: job.provider.toLowerCase(),
       });
     }
 

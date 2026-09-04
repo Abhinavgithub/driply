@@ -70,7 +70,7 @@ function describeWardrobe(summary: WardrobeSummary): string {
     .join(", ");
   const styles = summary.dominantStyles
     .slice(0, 3)
-    .map((s) => s.replace("_", " ").toLowerCase())
+    .map((s) => s.replaceAll("_", " ").toLowerCase())
     .join(", ");
   const formality = summary.dominantFormality?.toLowerCase() ?? null;
   const parts = [
@@ -131,6 +131,8 @@ export function buildStyleDnaImagePrompt(dna: {
 }
 
 export function hexToColorName(hex: string): string {
+  // Guard: DB data isn't re-validated, so malformed hex must not yield NaN hues.
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return "neutral";
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);

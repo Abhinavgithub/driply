@@ -86,6 +86,12 @@ enum TryOnJobStatus {
   FAILED
 }
 
+enum TryOnProvider {
+  GEMINI
+  FLUX
+  OPENAI
+}
+
 model User {
   id                   String          @id @db.Uuid
   email                String?         @unique
@@ -114,7 +120,7 @@ model TryOnJob {
   topItemId      String
   bottomItemId   String
   shoeItemId     String
-  provider       String
+  provider       TryOnProvider @default(GEMINI)
   status         TryOnJobStatus @default(PENDING)
   errorCode      String?
   /// Supabase Storage object path of the generated image; signed on read.
@@ -127,6 +133,8 @@ model TryOnJob {
   user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  // Covers the stale-job sweep and in-flight lookups by status.
+  @@index([status, createdAt])
 }
 
 model StyleDNA {
@@ -148,9 +156,9 @@ model StyleDNA {
   moodboardGeneratedAt DateTime?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  // No @@index([userId]): the @unique on userId already creates the btree.
   @@index([promptHash])
 }
 

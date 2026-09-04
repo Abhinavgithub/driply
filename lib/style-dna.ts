@@ -139,6 +139,10 @@ export async function getStyleDnaStatus(userId: string): Promise<StyleDnaStatus 
 export async function generateStyleDnaForUser(
   userId: string,
   trigger: "onboarding" | "manual" | "wardrobe_update" = "manual",
+  // Pre-handoff status captured by the calling endpoint BEFORE it writes
+  // PENDING (rule 9): reading it here would only ever see the endpoint's own
+  // write. Falls back to an internal read for direct callers.
+  preStatus: string | null = null,
 ): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -151,39 +155,46 @@ export async function generateStyleDnaForUser(
     return;
   }
 
-  const currentVersion = user?.styleDna?.version ?? 0;
-  const nextVersion = currentVersion + 1;
-
-  // Upsert record with GENERATING status
-  await prisma.styleDNA.upsert({
+  // Atomic version bump (no read-modify-write lost update) and keep-old:
+  // regenerating must not wipe prior READY data — getStyleDnaStatus hides
+  // non-READY rows, so clearing fields here would blank the UI on failure.
+  // NOTE: preStatus must come from the caller (see param) — by the time this
+  // runs, the endpoint has already written PENDING.
+  let restoreStatus = preStatus;
+  const prev = await prisma.styleDNA.findUnique({
     where: { userId },
-    create: {
-      userId,
-      version: nextVersion,
-      archetypeName: "",
-      description: "",
-      traits: [],
-      colorPalette: [],
-      imagePromptHints: [],
-      textStatus: "GENERATING",
-      moodboardStatus: "PENDING",
-      generationTrigger: trigger,
-    },
-    update: {
-      version: nextVersion,
-      archetypeName: "",
-      description: "",
-      traits: [],
-      colorPalette: [],
-      imagePromptHints: [],
-      textStatus: "GENERATING",
-      moodboardStatus: "PENDING",
-      moodboardUrl: null,
-      generatedAt: null,
-      moodboardGeneratedAt: null,
-      generationTrigger: trigger,
-    },
+    select: { textStatus: true },
   });
+  if (restoreStatus === null) restoreStatus = prev?.textStatus ?? null;
+  if (prev) {
+    await prisma.styleDNA.update({
+      where: { userId },
+      data: {
+        version: { increment: 1 },
+        textStatus: "GENERATING",
+        moodboardStatus: "PENDING",
+        moodboardUrl: null,
+        generatedAt: null,
+        moodboardGeneratedAt: null,
+        generationTrigger: trigger,
+      },
+    });
+  } else {
+    await prisma.styleDNA.create({
+      data: {
+        userId,
+        version: 1,
+        archetypeName: "",
+        description: "",
+        traits: [],
+        colorPalette: [],
+        imagePromptHints: [],
+        textStatus: "GENERATING",
+        moodboardStatus: "PENDING",
+        generationTrigger: trigger,
+      },
+    });
+  }
 
   try {
     const wardrobeSummary = await computeWardrobeSummary(userId);
@@ -213,9 +224,12 @@ export async function generateStyleDnaForUser(
     });
   } catch (err) {
     console.error("[style-dna] Generation failed for user", userId, err);
-    await Promise.all([
-      prisma.styleDNA.update({ where: { userId }, data: { textStatus: "FAILED" } }).catch(() => {}),
-      prisma.user.update({ where: { id: userId }, data: { lastDnaRegenAt: null } }).catch(() => {}),
-    ]);
+    // Restore the prior status so a failed regen doesn't hide previously
+    // READY data (kept intact above). Surface errors instead of swallowing.
+    await prisma.styleDNA.update({
+      where: { userId },
+      data: { textStatus: restoreStatus === "READY" ? "READY" : "FAILED" },
+    });
+    await prisma.user.update({ where: { id: userId }, data: { lastDnaRegenAt: null } });
   }
 }

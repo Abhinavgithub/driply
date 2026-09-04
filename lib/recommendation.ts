@@ -424,9 +424,20 @@ export function rankOutfits(args: {
 
   if (offset < 0 || limit <= 0) return [];
   if (!tops.length || !bottoms.length || !shoes.length) return [];
+  // Fail fast on malformed weather input: NaN would poison every totalScore
+  // and silently yield empty rankings (P1 guard).
+  if (!Number.isFinite(temperatureC) || !Number.isFinite(precipitationMm)) {
+    throw new Error("rankOutfits requires finite temperatureC and precipitationMm.");
+  }
 
   const maxKeep = offset + limit;
   const EPSILON = 1e-9;
+  // Bound CPU inside the serverless window: huge wardrobes (100×100×50 =
+  // 500k combos) are stride-sampled deterministically so results stay stable
+  // across requests while evaluation stays under budget (P0-7).
+  const MAX_EVAL_COMBOS = 250_000;
+  const totalCombos = tops.length * bottoms.length * shoes.length;
+  const stride = Math.max(1, Math.ceil(totalCombos / MAX_EVAL_COMBOS));
 
   function isCandidateBetter(a: RecommendationResult, b: RecommendationResult) {
     if (a.totalScore > b.totalScore + EPSILON) return true;
@@ -448,9 +459,12 @@ export function rankOutfits(args: {
 
   const bestCandidates: RecommendationResult[] = [];
 
+  let comboIndex = 0;
   for (const top of tops) {
     for (const bottom of bottoms) {
       for (const shoe of shoes) {
+        // Deterministic stride sampling when over budget (see stride above).
+        if (comboIndex++ % stride !== 0) continue;
         const weatherScore = weatherSuitabilityScore({
           isRaining,
           temperatureC,

@@ -320,3 +320,54 @@ describe("formatOutfitExplanation", () => {
     expect(text).toMatch(/rain/i);
   });
 });
+
+describe("rankOutfits input validation and sampling", () => {
+  it("throws on non-finite weather input instead of returning garbage", () => {
+    expect(() =>
+      rankOutfits({
+        dateKey: DATE,
+        temperatureC: NaN,
+        precipitationMm: 0,
+        tops: [summerTop],
+        bottoms: [summerBottom],
+        shoes: [summerShoe],
+        wornItemIds: new Set(),
+        offset: 0,
+        limit: 1,
+      }),
+    ).toThrow(/finite/);
+    expect(() =>
+      rankOutfits({
+        dateKey: DATE,
+        temperatureC: 20,
+        precipitationMm: Number.POSITIVE_INFINITY,
+        tops: [summerTop],
+        bottoms: [summerBottom],
+        shoes: [summerShoe],
+        wornItemIds: new Set(),
+        offset: 0,
+        limit: 1,
+      }),
+    ).toThrow(/finite/);
+  });
+
+  it("stride-samples deterministically on huge wardrobes", () => {
+    const many = (n: number, kind: "TOP" | "BOTTOM" | "SHOE", prefix: string) =>
+      Array.from({ length: n }, (_, i) => makeItem({ id: `${prefix}${i}`, kind }));
+    const args = {
+      dateKey: DATE,
+      temperatureC: 20,
+      precipitationMm: 0,
+      tops: many(120, "TOP", "t"),
+      bottoms: many(120, "BOTTOM", "b"),
+      shoes: many(60, "SHOE", "s"),
+      wornItemIds: new Set<string>(),
+      offset: 0,
+      limit: 6,
+    };
+    const first = rankOutfits(args).map((o) => getRecommendationCandidateId(o));
+    const second = rankOutfits(args).map((o) => getRecommendationCandidateId(o));
+    expect(first).toEqual(second);
+    expect(first.length).toBeGreaterThan(0);
+  });
+});

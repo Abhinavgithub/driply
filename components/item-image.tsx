@@ -11,7 +11,7 @@ type ItemImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "onError
 };
 
 /**
- * Wardrobe item photo that survives signed-URL expiry (1 hour). When the
+ * Wardrobe item photo that survives signed-URL expiry (10 minutes). When the
  * image fails to load on a long-lived tab, it fetches a fresh signed URL for
  * the item once and swaps it in. A second failure (e.g. item deleted) is
  * left alone.

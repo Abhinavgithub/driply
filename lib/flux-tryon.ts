@@ -33,13 +33,20 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
 
   const client = new InferenceClient(token);
 
+  // The HF SDK exposes no abort signal, so bound our wait with a race —
+  // without this a hung upstream request outlives the job and leaves it
+  // RUNNING until the poller times out (T-02).
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new TryOnApiError("FLUX request timed out.", "TIMEOUT")),
+      FLUX_TIMEOUT_MS,
+    );
+  });
   let blob: Blob;
   try {
-    const timer = setTimeout(() => {
-      /* no-op; HF SDK has its own timeout */
-    }, FLUX_TIMEOUT_MS);
-    try {
-      blob = await client.textToImage(
+    blob = await Promise.race([
+      client.textToImage(
         {
           provider: "nscale",
           model: FLUX_MODEL,
@@ -47,21 +54,36 @@ export async function generateFluxTryOnImage(args: { prompt: string }): Promise<
           parameters: { num_inference_steps: FLUX_INFERENCE_STEPS },
         },
         { outputType: "blob" },
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+      ),
+      timeoutPromise,
+    ]);
   } catch (error) {
+    if (error instanceof TryOnApiError) throw error;
     if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
       throw new TryOnApiError("FLUX request timed out.", "TIMEOUT");
     }
     const msg = error instanceof Error ? error.message : String(error);
-    const code = msg.includes("429")
-      ? "RATE_LIMITED"
-      : msg.includes("401") || msg.includes("403")
-        ? "UNAUTHORIZED"
-        : "UPSTREAM_ERROR";
-    throw new TryOnApiError(`FLUX generation failed: ${msg}`, code);
+    // Prefer the SDK's numeric status when present; fall back to message scan.
+    const status = (error as { status?: unknown; httpStatusCode?: unknown })?.status;
+    const httpStatus =
+      typeof status === "number"
+        ? status
+        : typeof (error as { httpStatusCode?: unknown })?.httpStatusCode === "number"
+          ? ((error as { httpStatusCode?: unknown }).httpStatusCode as number)
+          : undefined;
+    const code =
+      httpStatus === 429 || msg.includes("429")
+        ? "RATE_LIMITED"
+        : httpStatus === 401 || httpStatus === 403 || msg.includes("401") || msg.includes("403")
+          ? "UNAUTHORIZED"
+          : httpStatus !== undefined && httpStatus >= 500
+            ? "UPSTREAM_ERROR"
+            : /5\d\d/.test(msg)
+              ? "UPSTREAM_ERROR"
+              : "UNKNOWN";
+    throw new TryOnApiError(`FLUX generation failed: ${msg}`, code, httpStatus);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
 
   const arrayBuffer = await blob.arrayBuffer();

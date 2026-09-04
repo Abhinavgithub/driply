@@ -19,11 +19,18 @@ export function getOpenAITryOnModel(): string {
 }
 
 async function resizeToJpegBuffer(bytes: Buffer, maxDim: number): Promise<Buffer> {
-  return sharp(bytes, { animated: false })
-    .rotate()
-    .resize({ width: maxDim, height: maxDim, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 80, mozjpeg: true })
-    .toBuffer();
+  try {
+    return await sharp(bytes, { animated: false })
+      .rotate()
+      .resize({ width: maxDim, height: maxDim, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+  } catch (error) {
+    throw new TryOnApiError(
+      `Image preprocessing failed: ${error instanceof Error ? error.message : String(error)}`,
+      "IMAGE_PROCESSING_ERROR",
+    );
+  }
 }
 
 export async function generateOpenAITryOnImage(args: {
@@ -37,7 +44,8 @@ export async function generateOpenAITryOnImage(args: {
   const model = getOpenAITryOnModel();
   // Pass timeout directly to the client so the SDK properly aborts the HTTP
   // connection on expiry — Promise.race() leaves the request dangling.
-  const client = new OpenAI({ apiKey, timeout: TRYON_TIMEOUT_MS, maxRetries: 0 });
+  // maxRetries: 2 keeps the SDK's jittered retry for transient 429/5xx (T-04).
+  const client = new OpenAI({ apiKey, timeout: TRYON_TIMEOUT_MS, maxRetries: 2 });
 
   // Resize all images before sending to reduce token cost and latency
   const [tryOnResized, ...clothingResized] = await Promise.all([
@@ -71,14 +79,25 @@ export async function generateOpenAITryOnImage(args: {
     if (name === "APIConnectionTimeoutError" || name === "APIUserAbortError") {
       throw new TryOnApiError("OpenAI try-on timed out.", "TIMEOUT");
     }
-    const code = /401|403/.test(msg)
-      ? "UNAUTHORIZED"
-      : /429/.test(msg)
-        ? "RATE_LIMITED"
-        : /5\d\d/.test(msg)
-          ? "UPSTREAM_ERROR"
-          : "UNKNOWN";
-    throw new TryOnApiError(`OpenAI image edit failed: ${msg}`, code);
+    // Prefer the SDK's numeric status (APIError.status) over message scans —
+    // rate-limit messages don't always contain "429" (T-05).
+    const status = (error as { status?: unknown })?.status;
+    const httpStatus = typeof status === "number" ? status : undefined;
+    const code =
+      httpStatus === 401 || httpStatus === 403
+        ? "UNAUTHORIZED"
+        : httpStatus === 429
+          ? "RATE_LIMITED"
+          : httpStatus !== undefined && httpStatus >= 500
+            ? "UPSTREAM_ERROR"
+            : /401|403/.test(msg)
+              ? "UNAUTHORIZED"
+              : /429/.test(msg)
+                ? "RATE_LIMITED"
+                : /5\d\d/.test(msg)
+                  ? "UPSTREAM_ERROR"
+                  : "UNKNOWN";
+    throw new TryOnApiError(`OpenAI image edit failed: ${msg}`, code, httpStatus);
   }
 
   const b64 = response.data?.[0]?.b64_json;

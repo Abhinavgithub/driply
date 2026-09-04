@@ -12,7 +12,9 @@ import {
   type TryOnPromptItem,
 } from "@/lib/tryon-prompt";
 
-const SIGNED_RESULT_TTL_SECONDS = 60 * 60;
+// 10-minute TTL (tradeoff-2): bounds the exposure window of leaked URLs;
+// the client re-signs on poll and ItemImage refreshes on expiry.
+const SIGNED_RESULT_TTL_SECONDS = 10 * 60;
 const JOB_RETENTION_DAYS = 7;
 
 function tryOnResultPath(userId: string, jobId: string, mimeType: string) {
@@ -35,15 +37,25 @@ export async function getSignedTryOnResultUrl(path: string): Promise<string | nu
  */
 export async function pruneOldTryOnJobs(userId: string): Promise<void> {
   const cutoff = new Date(Date.now() - JOB_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  // Bounded batch: called opportunistically on creation, so one pass per
+  // creation is enough; an uncapped findMany could OOM on abuse.
   const stale = await prisma.tryOnJob.findMany({
     where: { userId, createdAt: { lt: cutoff } },
     select: { id: true, resultPath: true },
+    take: 100,
   });
   if (stale.length === 0) return;
 
   const paths = stale.map((job) => job.resultPath).filter((p): p is string => Boolean(p));
   if (paths.length > 0) {
-    await getSupabaseAdminClient().storage.from(getSupabaseStorageBucket()).remove(paths);
+    const { error } = await getSupabaseAdminClient()
+      .storage.from(getSupabaseStorageBucket())
+      .remove(paths);
+    if (error) {
+      console.warn("[tryon-job] prune storage remove failed (rows still deleted)", {
+        error: error.message,
+      });
+    }
   }
   await prisma.tryOnJob.deleteMany({ where: { id: { in: stale.map((job) => job.id) } } });
 }
@@ -117,7 +129,7 @@ export async function processTryOnJob(jobId: string): Promise<void> {
 
     let result: { imageBase64: string; mimeType: string };
 
-    if (job.provider === "flux") {
+    if (job.provider === "FLUX") {
       result = await generateFluxTryOnImage({ prompt: buildFluxTryOnPrompt({ items: itemMeta }) });
     } else {
       const [tryOnPhotoBytes, topBytes, bottomBytes, shoeBytes] = await Promise.all([
@@ -132,16 +144,16 @@ export async function processTryOnJob(jobId: string): Promise<void> {
         return;
       }
 
-      const clothingImages = [topBytes, bottomBytes, shoeBytes]
-        .filter((b): b is Buffer => b !== null)
-        .map((bytes) => ({ bytes }));
-      if (clothingImages.length === 0) {
+      // P0-5: require the full outfit — generating from a partial set
+      // produces a misleading image (e.g. top only).
+      if (!topBytes || !bottomBytes || !shoeBytes) {
         await failJob(jobId, "clothing_images_unavailable");
         return;
       }
+      const clothingImages = [topBytes, bottomBytes, shoeBytes].map((bytes) => ({ bytes }));
 
       result =
-        job.provider === "openai"
+        job.provider === "OPENAI"
           ? await generateOpenAITryOnImage({
               tryOnPhotoBytes,
               clothingImages,
@@ -159,12 +171,15 @@ export async function processTryOnJob(jobId: string): Promise<void> {
       .storage.from(getSupabaseStorageBucket())
       .upload(resultPath, Buffer.from(result.imageBase64, "base64"), {
         contentType: result.mimeType,
-        upsert: true,
+        // No upsert: jobId paths are unique; overwriting would mask a
+        // collision/retry bug instead of surfacing it.
+        upsert: false,
       });
     if (uploadError) throw new Error(`Result upload failed: ${uploadError.message}`);
 
-    await prisma.tryOnJob.update({
-      where: { id: jobId },
+    // Status-guarded so a concurrent failJob can't overwrite READY (P1-4).
+    const completed = await prisma.tryOnJob.updateMany({
+      where: { id: jobId, status: "RUNNING" },
       data: {
         status: "READY",
         resultPath,
@@ -173,6 +188,9 @@ export async function processTryOnJob(jobId: string): Promise<void> {
         completedAt: new Date(),
       },
     });
+    if (completed.count === 0) {
+      console.warn("[tryon-job] job left RUNNING by a concurrent update", { jobId });
+    }
   } catch (error) {
     const code = normalizeTryOnErrorCode(error);
     console.warn("[tryon-job] generation failed", {
@@ -186,8 +204,9 @@ export async function processTryOnJob(jobId: string): Promise<void> {
 }
 
 async function failJob(jobId: string, errorCode: string): Promise<void> {
-  await prisma.tryOnJob.update({
-    where: { id: jobId },
+  // Status-guarded so a late failure can't overwrite a concurrent READY (P1-4).
+  await prisma.tryOnJob.updateMany({
+    where: { id: jobId, status: { in: ["PENDING", "RUNNING"] } },
     data: { status: "FAILED", errorCode, completedAt: new Date() },
   });
 }
