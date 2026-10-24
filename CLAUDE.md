@@ -36,6 +36,8 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 
 **Client vs Server components:** `/today`, `/library`, `/profile`, `/onboarding` are all `"use client"` pages that fetch data via `useEffect` + browser `fetch()`. Auth pages (`/sign-in`, `/sign-up`, `/auth/callback`) are Server Components. There is no `middleware.ts`; auth is enforced per-route. `proxy.ts` server-gates `/today/*` + `/library/*` (redirect to `/sign-in`) and degrades open on errors; `/profile` relies on client-side 401 handling and `/onboarding` is public by design.
 
+**Visual design ("Soft studio"):** light-only theme defined as tokens at the top of `app/globals.css` (sand `--background`, white `--surface`, ink `--foreground`/`--ink`, terracotta `--accent` reserved for primary actions, blue `--info` for weather, neutral `--photo-bg` behind garment photos so colours stay true); font is Plus Jakarta Sans via `next/font` (`--font-jakarta`). Use tokens, not raw colours. The app shell is an ink sidebar on md+ and a floating ink pill tab bar on mobile.
+
 **Client fetch convention:** pages call APIs through `useApiFetch()` (`lib/hooks/use-api-fetch.ts`), which wraps `fetchJson` (`lib/fetch-utils.ts`): throws `ApiError` on non-2xx, aborts in-flight requests on unmount, and redirects to `/sign-in` on 401. Catch blocks bail out early with `isHandledFetchError(e)` before surfacing errors. Item photos render via `<ItemImage>` (`components/item-image.tsx`), which re-fetches a fresh signed URL once on image load failure (signed URLs expire after 10 minutes).
 
 **API route conventions:**

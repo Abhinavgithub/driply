@@ -557,7 +557,21 @@ export function LandingPage() {
         <div className="lp-steps-grid">
           <div className="lp-step lp-reveal lp-reveal-delay-1">
             <div className="lp-step-num">01</div>
-            <div className="lp-step-icon">📸</div>
+            <div className="lp-step-icon" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                <circle cx="12" cy="13" r="3" />
+              </svg>
+            </div>
             <div className="lp-step-title">Upload your wardrobe</div>
             <p className="lp-step-desc">
               Photograph your clothes once. driply reads colors, fabric types, and garment
@@ -566,7 +580,22 @@ export function LandingPage() {
           </div>
           <div className="lp-step lp-reveal lp-reveal-delay-2">
             <div className="lp-step-num">02</div>
-            <div className="lp-step-icon">🌤</div>
+            <div className="lp-step-icon" aria-hidden="true">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 2v2M4.9 4.9l1.4 1.4M2 12h2M19.1 4.9l-1.4 1.4" />
+                <path d="M15.9 13.1A4 4 0 1 0 8.4 10" />
+                <path d="M17.5 21H9a4 4 0 1 1 .9-7.9 5 5 0 0 1 9.6 1.9 3 3 0 0 1-2 6z" />
+              </svg>
+            </div>
             <div className="lp-step-title">Get daily outfit picks</div>
             <p className="lp-step-desc">
               Every morning, driply checks your local weather and surfaces three ready-to-wear
@@ -575,7 +604,9 @@ export function LandingPage() {
           </div>
           <div className="lp-step lp-reveal lp-reveal-delay-3">
             <div className="lp-step-num">03</div>
-            <div className="lp-step-icon">✦</div>
+            <div className="lp-step-icon" aria-hidden="true">
+              ✦
+            </div>
             <div className="lp-step-title">It learns your vibe</div>
             <p className="lp-step-desc">
               Rate outfits to train your taste profile. driply gets sharper with every tap — no two

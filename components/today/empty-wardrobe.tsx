@@ -64,7 +64,7 @@ export function EmptyWardrobe({ needs, showTryOnPrompt }: EmptyWardrobeProps) {
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 24,
-                color: "oklch(75% 0.18 200)",
+                color: "var(--accent)",
               }}
             >
               ✦

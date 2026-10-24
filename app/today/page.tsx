@@ -166,7 +166,7 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="today-layout">
       {/* ── Mood Banner ── */}
       {current ? (
         <MoodBanner
@@ -187,7 +187,7 @@ export default function TodayPage() {
               color: "var(--foreground)",
             }}
           >
-            Today · <span style={{ color: "oklch(75% 0.18 200)" }}>{localDateFormatted}</span>
+            Today · <span style={{ color: "var(--muted-foreground)" }}>{localDateFormatted}</span>
           </span>
         </div>
       ) : null}
