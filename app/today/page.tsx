@@ -22,9 +22,19 @@ type UserProfile = {
   archetypeName: string | null;
 };
 
-function getLocalDateKey() {
-  return new Date().toLocaleDateString("en-CA");
+function getLocalDateKey(date = new Date()) {
+  return date.toLocaleDateString("en-CA");
 }
+
+/** Local date `offsetDays` from today (0 = today, 1 = tomorrow). */
+function localDateFromToday(offsetDays: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  return date;
+}
+
+// From 8pm the rest of today is mostly over, so open on tomorrow's plan.
+const TOMORROW_DEFAULT_FROM_HOUR = 20;
 
 function outfitKey(option: RecommendationOption) {
   return `${option.top.id}_${option.bottom.id}_${option.shoe.id}`;
@@ -36,16 +46,25 @@ export default function TodayPage() {
   const authUserId = user?.id ?? null;
 
   const localDateKey = useMemo(() => getLocalDateKey(), []);
-  const localDateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  }, []);
   const savedLocationKey = authUserId ? `driply-saved-location:${authUserId}` : null;
 
-  const rec = useRecommendations({ savedLocationKey, dateKey: localDateKey });
+  const [dayOffset, setDayOffset] = useState<0 | 1>(() =>
+    new Date().getHours() >= TOMORROW_DEFAULT_FROM_HOUR ? 1 : 0,
+  );
+  const isTomorrow = dayOffset === 1;
+  const viewDate = useMemo(() => localDateFromToday(dayOffset), [dayOffset]);
+  const viewDateKey = useMemo(() => getLocalDateKey(viewDate), [viewDate]);
+
+  const rec = useRecommendations({ savedLocationKey, dateKey: viewDateKey });
+  const viewDateFormatted = useMemo(
+    () =>
+      viewDate.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
+    [viewDate],
+  );
   const { current, loadInitial } = rec;
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -60,7 +79,7 @@ export default function TodayPage() {
   } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const marked = current !== null && markedOutfitKey === outfitKey(current);
+  const marked = !isTomorrow && current !== null && markedOutfitKey === outfitKey(current);
   const displayError = rec.error ?? actionError;
 
   // Profile + week history
@@ -171,6 +190,9 @@ export default function TodayPage() {
       {current ? (
         <MoodBanner
           option={current}
+          weather={rec.weather}
+          viewDate={viewDate}
+          isTomorrow={isTomorrow}
           displayName={userProfile?.displayName ?? null}
           locationSource={rec.locationSource}
           activeLocationLabel={rec.activeLocationLabel}
@@ -187,8 +209,40 @@ export default function TodayPage() {
               color: "var(--foreground)",
             }}
           >
-            Today · <span style={{ color: "oklch(75% 0.18 200)" }}>{localDateFormatted}</span>
+            {isTomorrow ? "Tomorrow" : "Today"} ·{" "}
+            <span style={{ color: "oklch(75% 0.18 200)" }}>{viewDateFormatted}</span>
           </span>
+        </div>
+      ) : null}
+
+      {/* ── Today / Tomorrow ── */}
+      {!rec.needs ? (
+        <div role="radiogroup" aria-label="Day to dress for" className="flex gap-1.5">
+          {(
+            [
+              { offset: 0, label: "Today" },
+              { offset: 1, label: "Tomorrow" },
+            ] as const
+          ).map((day) => {
+            const isSelected = dayOffset === day.offset;
+            return (
+              <button
+                key={day.offset}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                disabled={rec.loading}
+                onClick={() => setDayOffset(day.offset)}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  isSelected
+                    ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
+                    : "border-border font-medium text-foreground hover:border-foreground/50"
+                }`}
+              >
+                {day.label}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
@@ -199,7 +253,7 @@ export default function TodayPage() {
           savedLocation={rec.savedLocation}
           onUseLocation={(location) => void rec.useLocation(location)}
           onClearSavedLocation={rec.clearSavedLocation}
-          onRetryDevice={() => void rec.loadInitial()}
+          onRetryDevice={() => void rec.loadInitial({ forceDevice: true })}
         />
       ) : null}
 
@@ -259,6 +313,7 @@ export default function TodayPage() {
           displayName={userProfile.displayName}
           hasTryOnPhoto={userProfile.hasTryOnPhoto}
           marked={marked}
+          canMarkWorn={!isTomorrow}
           loading={rec.loading}
           onMarkWorn={() => void onMarkWorn()}
           onShowAnother={() => void rec.showAnother()}

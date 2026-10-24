@@ -42,7 +42,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - All authenticated routes use `withAuth(handler, { key, max }?)` from `lib/api-guard.ts` — returns 401 if unauthenticated, 429 on rate limit (Postgres-backed fixed 60s window, per-user keys like `items:post:${userId}`)
 - POST/PATCH routes validate with Zod schemas; validation failures return 400
 - Item, profile, and try-on photos are always served as signed URLs (10-minute expiry) via `attachSignedPhotoUrls()` — raw `photoUrl` from storage is never exposed in API responses
-- Two recommendation endpoints: `GET /api/recommendation` (singular, single outfit + debug scores for `/today`) vs `GET /api/recommendations` (plural, paginated carousel)
+- `GET /api/recommendations` (paginated) is the only recommendation endpoint; it returns `options` plus the `weather` day summary they were scored against. `date=YYYY-MM-DD` picks the day (today or tomorrow; `/today` has a Today/Tomorrow switch that defaults to tomorrow from 8pm)
 - Failed item analysis can be retried via `POST /api/items/analyze` with `{ itemId }` in the body (only items with `analysisStatus: PENDING`)
 - `GET /api/items?ids=a,b,c` narrows to specific items (used to mint fresh signed photo URLs)
 - Try-on is async: `POST /api/tryon` creates a `TryOnJob` and returns `{ jobId }`; the client polls `GET /api/tryon?jobId=…` until `ready` (signed result URL) or `failed`
@@ -59,7 +59,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `lib/tryon-prompt.ts` — prompt builders for try-on providers: `buildTryOnPrompt()` / `buildOpenAITryOnPrompt()` (multimodal, Gemini + OpenAI) and `buildFluxTryOnPrompt()` (text-only)
 - `lib/tryon-job.ts` / `lib/tryon-trigger.ts` — background try-on processing: trigger schedules `processTryOnJob()` via `next/server`'s `after()`; results are stored in Supabase Storage and served as signed URLs
 - `lib/style-dna.ts` / `lib/style-dna-prompt.ts` — Style DNA generation (`generateStyleDnaForUser()`, `getStyleDnaStatus()`); regeneration has a DB-backed 24h cooldown (`User.lastDnaRegenAt`)
-- `lib/recommendation.ts` — deterministic outfit scoring (weather 45%, color 20%, style 15%, formality 10%, pattern 5%, warmth 5%)
+- `lib/recommendation.ts` — deterministic outfit scoring against the day-window weather (weather 45%, color 20%, style 15%, formality 10%, pattern 5%, warmth 5%)
 - `lib/aiRecommendation.ts` — optional Gemini re-ranking on top of deterministic scores
 - `lib/env.ts` — centralized env-var getters + `validateEnv()`; called once at boot from `instrumentation.ts` so misconfigured deploys fail at start with the full list of missing vars. Read env through these getters, not `process.env`. `lib/supabase/env.ts` re-exports the Supabase getters for back-compat.
 - `lib/prisma.ts` — singleton Prisma client with `@prisma/adapter-pg`
@@ -68,11 +68,11 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `lib/types/wardrobe.ts` — shared client-side shapes of API responses (`WardrobeItem`, `RecommendationOption`, `ProfileResponse`, …); import these instead of re-declaring per page
 - `lib/item-media.ts` — Supabase Storage upload/delete/sign helpers for wardrobe item photos
 - `lib/profile-media.ts` — Storage helpers for profile photos; avatar at `profiles/{userId}/avatar.{ext}`, try-on at `profiles/{userId}/tryon.{ext}`; `downloadStorageObject()` for server-side byte downloads
-- `lib/openMeteo.ts` — weather data from Open-Meteo API
+- `lib/openMeteo.ts` — Open-Meteo hourly forecast (`fetchForecast`, cached 10 min per location) reduced by `summarizeDayWeather()` to a `DayWeather` for the day window: 8am–8pm local (today starts at the current hour; after 8pm, the hours left). Outfits are scored against the window's coldest feels-like temperature, and it's a rain day if any window hour has a ≥40% rain chance or ≥0.1mm. `lib/weather-format.ts` renders the one-line timeline on `/today`
 
 **Database (Prisma + Supabase Postgres):**
 - `User` — synced from Supabase Auth on first login; extended with `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`, `aiTryOnPhotoMimeType` (user-controlled, never overwritten by OAuth sync)
-- `Item` — wardrobe item with `kind` (TOP/BOTTOM/SHOE), attribute enums (colorFamily, pattern, styleProfile, formality, warmthLevel), and AI analysis fields (`analysisStatus`, `metadataSource`, etc.). Upload sets `analysisStatus` per path: `READY` (AI classification succeeded, or manual with all attributes), `SKIPPED` (manual with unknown attributes), `PENDING` (AI attempted but failed — retryable via the analyze endpoint). Only `READY` items enter recommendations. Key enums: `AnalysisStatus` (PENDING/READY/FAILED/SKIPPED), `MetadataSource` (MANUAL/AI/MIXED)
+- `Item` — wardrobe item with `kind` (TOP/BOTTOM/SHOE), attribute enums (colorFamily, pattern, styleProfile, formality, warmthLevel), and AI analysis fields (`analysisStatus`, `metadataSource`, etc.). Upload sets `analysisStatus` per path: `READY` (AI classification succeeded, or manual with all attributes), `SKIPPED` (manual with unknown attributes), `PENDING` (AI attempted but failed — retryable via the analyze endpoint). Every item except `PENDING` enters recommendations; unknown attributes are penalised in scoring (`UNKNOWN_ATTRIBUTE_PENALTY`) rather than excluded, so manual uploads still appear. Key enums: `AnalysisStatus` (PENDING/READY/FAILED/SKIPPED), `MetadataSource` (MANUAL/AI/MIXED)
 - `OutfitHistory` — records of outfits worn; 7-day lookback used to penalize recently-repeated combinations. Item ids are optional FKs to `Item` (`onDelete: SetNull` — deleting an item keeps the history row with a null id), with a unique constraint on `(userId, date, topItemId, bottomItemId, shoeItemId)` for idempotent logging
 - `TryOnJob` — async try-on generation jobs (PENDING/RUNNING/READY/FAILED) polled by the client
 - `StyleDNA` — generated style profile per user

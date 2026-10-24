@@ -481,6 +481,14 @@ export async function rerankOutfitCandidates(args: {
   weather: {
     temperatureC: number;
     precipitationMm: number;
+    /** Day-window context (coldest/warmest feels-like, rain chance) when forecast data exists. */
+    day?: {
+      windowLocalHours: string;
+      coldestFeelsLikeC: number;
+      warmestFeelsLikeC: number;
+      maxRainChancePct: number | null;
+      isRainDay: boolean;
+    };
   };
   candidates: RerankCandidate[];
 }) {
@@ -519,7 +527,8 @@ export async function rerankOutfitCandidates(args: {
         parts: [
           {
             text:
-              "Choose the best outfit candidate for today. " +
+              "Choose the best outfit candidate for the day. " +
+              "Weather covers the whole day window: dress for the coldest hour and any rain, not just the current reading. " +
               "Priority order: weather fit first, then cohesive style/color/formality, then avoid recently worn pieces. " +
               "Write the reason in a fun, confident Gen-Z tone — casual, punchy, 1 sentence, no cringe. Think how a stylish friend texts, not a fashion magazine. No hashtags. " +
               "Output ONLY valid JSON matching the schema \u2014 no markdown, no explanation, no extra text. " +

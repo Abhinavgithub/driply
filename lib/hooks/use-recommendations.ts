@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { ApiError, isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch, type ApiFetch } from "@/lib/hooks/use-api-fetch";
@@ -17,6 +17,7 @@ import {
   type SavedLocation,
 } from "@/lib/saved-location";
 import type {
+  DayWeather,
   RecommendationNeeds,
   RecommendationOption,
   RecommendationOptionsResponse,
@@ -56,6 +57,14 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
   const [locationSource, setLocationSource] = useState<LocationSource>(null);
   const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(null);
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null);
+  const [weather, setWeather] = useState<DayWeather | null>(null);
+  // Last location that loaded successfully: switching Today/Tomorrow reuses
+  // it instead of asking the browser for the device position again.
+  const lastLocationRef = useRef<{
+    coords: Coordinates;
+    source: LocationSource;
+    label?: string;
+  } | null>(null);
 
   const loadForCoordinates = useCallback(
     async (nextCoords: Coordinates, source: LocationSource, locationLabel?: string) => {
@@ -80,49 +89,73 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
       }
       setOptions(data.options ?? []);
       setCursor(data.offset + (data.options?.length ?? 0));
+      setWeather(data.weather ?? null);
+      lastLocationRef.current = { coords: nextCoords, source, label: locationLabel };
     },
     [apiFetch, dateKey],
   );
 
-  const loadInitial = useCallback(async () => {
-    if (!savedLocationKey) return;
-    setError(null);
-    setLocationError(null);
-    setNeeds(null);
-    setOptions([]);
-    setSelectedIndex(0);
-    setCursor(0);
-    const storedLocation = getSavedLocation(savedLocationKey);
-    setSavedLocationState(storedLocation);
+  /**
+   * Loads the first page for `dateKey`. Reuses the last good location unless
+   * `forceDevice` asks for a fresh device position (the "retry" path).
+   */
+  const loadInitial = useCallback(
+    async (opts?: { forceDevice?: boolean }) => {
+      if (!savedLocationKey) return;
+      setError(null);
+      setLocationError(null);
+      setNeeds(null);
+      setOptions([]);
+      setWeather(null);
+      setSelectedIndex(0);
+      setCursor(0);
+      const storedLocation = getSavedLocation(savedLocationKey);
+      setSavedLocationState(storedLocation);
 
-    setLoading(true);
-    try {
-      const nextCoords = await (takePendingGeolocation() ?? getGeolocationWithRetry());
-      await loadForCoordinates(nextCoords, "device");
-    } catch (e) {
-      if (isHandledFetchError(e)) return;
-      const message = e instanceof Error ? e.message : String(e);
-      setLocationError(message);
-      if (storedLocation) {
+      setLoading(true);
+      const last = opts?.forceDevice ? null : lastLocationRef.current;
+      if (last) {
         try {
-          await loadForCoordinates(
-            { lat: storedLocation.latitude, lon: storedLocation.longitude },
-            "saved",
-            formatLocationLabel(storedLocation),
-          );
-          setLocationError(null);
+          await loadForCoordinates(last.coords, last.source, last.label);
+        } catch (e) {
+          if (isHandledFetchError(e)) return;
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
           setLoading(false);
-          return;
-        } catch (fallbackError) {
-          if (isHandledFetchError(fallbackError)) return;
-          setLocationError(null);
-          setError(fallbackError instanceof Error ? fallbackError.message : String(fallbackError));
         }
+        return;
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [loadForCoordinates, savedLocationKey, takePendingGeolocation]);
+      try {
+        const nextCoords = await (takePendingGeolocation() ?? getGeolocationWithRetry());
+        await loadForCoordinates(nextCoords, "device");
+      } catch (e) {
+        if (isHandledFetchError(e)) return;
+        const message = e instanceof Error ? e.message : String(e);
+        setLocationError(message);
+        if (storedLocation) {
+          try {
+            await loadForCoordinates(
+              { lat: storedLocation.latitude, lon: storedLocation.longitude },
+              "saved",
+              formatLocationLabel(storedLocation),
+            );
+            setLocationError(null);
+            setLoading(false);
+            return;
+          } catch (fallbackError) {
+            if (isHandledFetchError(fallbackError)) return;
+            setLocationError(null);
+            setError(
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            );
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadForCoordinates, savedLocationKey, takePendingGeolocation],
+  );
 
   /** Loads a manually chosen (or saved) location and persists it. */
   const useLocation = useCallback(
@@ -198,6 +231,7 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
     error,
     locationError,
     needs,
+    weather,
     locationSource,
     activeLocationLabel,
     savedLocation,
