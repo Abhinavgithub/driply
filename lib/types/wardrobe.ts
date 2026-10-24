@@ -1,4 +1,5 @@
 import type { ItemAttributeValues } from "@/lib/itemAttributes";
+import type { Occasion, OccasionSource } from "@/lib/occasion";
 import type { DayWeather } from "@/lib/openMeteo";
 import type { StylePreferences } from "@/lib/style-preferences";
 
@@ -41,6 +42,7 @@ export type RecommendationDebugScores = {
   formalityAlignmentScore: number;
   patternBalanceScore: number;
   warmthCoherenceScore: number;
+  occasionScore: number;
   historyPenalty: number;
   unknownAttributeCount: number;
   metadataCompletenessPenalty: number;
@@ -64,6 +66,9 @@ export type RecommendationOptionsResponse = {
   dateKey: string;
   /** Day-window weather summary the options were scored against. */
   weather: DayWeather;
+  /** Occasion the options were scored for, and where it came from. */
+  occasion: Occasion;
+  occasionSource: OccasionSource;
   options: RecommendationOption[];
   offset: number;
   limit: number;

@@ -5,6 +5,7 @@ import { withAuth } from "@/lib/api-guard";
 import { validateImageBlob } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
 import { parseStylePreferences } from "@/lib/style-preferences";
+import { OCCASIONS, parseOccasionByWeekday, weekdayKeyForDateKey } from "@/lib/occasion";
 import {
   deleteProfilePhoto,
   getSignedProfilePhotoUrl,
@@ -14,6 +15,12 @@ import {
 const MAX_PROFILE_PHOTO_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const DisplayNameSchema = z.string().trim().min(1).max(80);
+
+// Remembers the occasion chip picked on /today for that date's weekday.
+const OccasionPickSchema = z.object({
+  dateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  occasion: z.enum(OCCASIONS),
+});
 
 export const GET = withAuth(
   async (currentUser) => {
@@ -60,6 +67,7 @@ export const PATCH = withAuth(
     const rawAvatar = formData.get("avatar");
     const rawTryOnPhoto = formData.get("aiTryOnPhoto");
     const rawStylePreferences = formData.get("stylePreferences");
+    const rawOccasionPick = formData.get("occasionPick");
 
     // Validate display name if provided
     let displayName: string | undefined;
@@ -77,7 +85,7 @@ export const PATCH = withAuth(
     // Fetch current user record for existing paths
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { uploadedAvatarUrl: true, aiTryOnPhotoUrl: true },
+      select: { uploadedAvatarUrl: true, aiTryOnPhotoUrl: true, occasionByWeekday: true },
     });
 
     const updates: Record<string, unknown> = {};
@@ -152,6 +160,27 @@ export const PATCH = withAuth(
         return NextResponse.json({ error: "Invalid style preferences." }, { status: 400 });
       }
       updates.stylePreferences = validated;
+    }
+
+    // Handle occasion pick (merged into the per-weekday map)
+    if (typeof rawOccasionPick === "string") {
+      if (rawOccasionPick.length > 1024) {
+        return NextResponse.json({ error: "Occasion payload too large." }, { status: 413 });
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawOccasionPick);
+      } catch {
+        return NextResponse.json({ error: "Invalid occasion JSON." }, { status: 400 });
+      }
+      const pick = OccasionPickSchema.safeParse(parsed);
+      if (!pick.success) {
+        return NextResponse.json({ error: "Invalid occasion." }, { status: 400 });
+      }
+      updates.occasionByWeekday = {
+        ...parseOccasionByWeekday(existingUser?.occasionByWeekday),
+        [weekdayKeyForDateKey(pick.data.dateKey)]: pick.data.occasion,
+      };
     }
 
     if (Object.keys(updates).length === 0) {
