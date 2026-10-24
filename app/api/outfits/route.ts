@@ -5,6 +5,7 @@ import { z } from "zod";
 import { withAuth } from "@/lib/api-guard";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { dateKeyToUtcStart } from "@/lib/date-utils";
+import { OCCASION_DB_VALUES, OCCASIONS } from "@/lib/occasion";
 import { prisma } from "@/lib/prisma";
 
 const BodySchema = z.object({
@@ -12,6 +13,7 @@ const BodySchema = z.object({
   topItemId: z.string().min(1),
   bottomItemId: z.string().min(1),
   shoeItemId: z.string().min(1),
+  occasion: z.enum(OCCASIONS).optional(),
 });
 
 const DeleteSchema = z.object({
@@ -83,7 +85,7 @@ export const POST = withAuth(
       );
     }
 
-    const { dateKey, topItemId, bottomItemId, shoeItemId } = parsed.data;
+    const { dateKey, topItemId, bottomItemId, shoeItemId, occasion } = parsed.data;
     const ownedItems = await prisma.item.findMany({
       where: {
         userId: currentUser.appUser.id,
@@ -105,7 +107,9 @@ export const POST = withAuth(
     };
 
     try {
-      const history = await prisma.outfitHistory.create({ data: outfitKey });
+      const history = await prisma.outfitHistory.create({
+        data: { ...outfitKey, occasion: occasion ? OCCASION_DB_VALUES[occasion] : null },
+      });
       return NextResponse.json({ ok: true, history });
     } catch (err) {
       // Unique violation: an identical outfit was logged concurrently — idempotent.

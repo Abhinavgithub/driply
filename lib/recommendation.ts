@@ -10,6 +10,7 @@ import type {
 
 import { formatHour } from "@/lib/date-utils";
 import type { DayWeather } from "@/lib/openMeteo";
+import { targetFormalityFor, type Occasion } from "@/lib/occasion";
 import type { StylePreferences } from "@/lib/style-preferences";
 
 export type ItemWithAttributes = Pick<
@@ -36,6 +37,7 @@ export type ScoreBreakdown = {
   formalityAlignmentScore: number;
   patternBalanceScore: number;
   warmthCoherenceScore: number;
+  occasionScore: number;
   historyPenalty: number;
   unknownAttributeCount: number;
   metadataCompletenessPenalty: number;
@@ -101,6 +103,10 @@ function getPersonalizedWeights(prefs?: StylePreferences | null): ScoringWeights
 }
 
 const UNKNOWN_ATTRIBUTE_PENALTY = 0.12;
+// Small additive nudge for occasion-specific style cues (athleisure for
+// Active, one statement piece for Going out). Formality itself is handled by
+// the target in scoreFormalityAlignment.
+const OCCASION_WEIGHT = 0.05;
 
 const neutralColors = new Set<ColorFamily>(["BLACK", "WHITE", "GREY", "BEIGE", "BROWN"]);
 const accentColors = new Set<ColorFamily>(["RED", "PINK", "YELLOW", "GREEN"]);
@@ -299,14 +305,45 @@ function scoreFormalityAlignment(
   top: ItemWithAttributes,
   bottom: ItemWithAttributes,
   shoe: ItemWithAttributes,
+  targetFormality?: number,
 ) {
   const values = [top.formality, bottom.formality, shoe.formality].map(
     (value) => formalityScale[value],
   );
   const spread = Math.max(...values) - Math.min(...values);
-  if (spread === 0) return 1;
-  if (spread === 1) return 0.35;
-  return -0.8;
+  const agreement = spread === 0 ? 1 : spread === 1 ? 0.35 : -0.8;
+  if (targetFormality === undefined) return agreement;
+
+  // Half "items agree", half "items land on the day's target": an all-relaxed
+  // outfit no longer scores perfectly for Work.
+  const meanDistance =
+    values.reduce((sum, value) => sum + Math.abs(value - targetFormality), 0) / values.length;
+  const onTarget = clamp(1 - meanDistance, -1, 1);
+  return 0.5 * agreement + 0.5 * onTarget;
+}
+
+function scoreOccasionStyle(
+  occasion: Occasion | undefined,
+  top: ItemWithAttributes,
+  bottom: ItemWithAttributes,
+  shoe: ItemWithAttributes,
+) {
+  if (!occasion || occasion === "casual") return 0;
+  const items = [top, bottom, shoe];
+  const athleisureCount = items.filter((item) => item.styleProfile === "ATHLEISURE").length;
+
+  if (occasion === "work") return -athleisureCount / 3;
+  if (occasion === "active") {
+    const sneakers = shoe.subtype.toLowerCase() === "sneakers" ? 0.3 : 0;
+    return clamp(athleisureCount / 3 + sneakers, -1, 1);
+  }
+  // going_out: exactly one statement piece (accent colour or pattern).
+  const statementCount = items.filter(
+    (item) =>
+      accentColors.has(item.colorFamily) ||
+      (item.pattern !== "SOLID" && item.pattern !== "UNKNOWN"),
+  ).length;
+  return statementCount === 1 ? 0.5 : statementCount === 0 ? 0 : -0.25;
 }
 
 function expectedWarmthForWeather(
@@ -382,6 +419,7 @@ export function recommendOutfit(args: {
   wornItemIds: Set<string>;
   stylePreferences?: StylePreferences | null;
   isRainDay?: boolean;
+  occasion?: Occasion;
 }): RecommendationResult {
   const ranked = rankOutfits({
     ...args,
@@ -408,6 +446,8 @@ export function rankOutfits(args: {
    * to "any precipitation in `precipitationMm`" (the old live-reading rule).
    */
   isRainDay?: boolean;
+  /** The day's occasion; sets a target formality. Omitted = agreement-only (legacy). */
+  occasion?: Occasion;
 }): RecommendationResult[] {
   const {
     dateKey,
@@ -422,6 +462,8 @@ export function rankOutfits(args: {
     stylePreferences,
   } = args;
   const isRaining = args.isRainDay ?? precipitationMm >= 0.1;
+  const { occasion } = args;
+  const targetFormality = occasion ? targetFormalityFor(occasion, stylePreferences) : undefined;
   const weights = getPersonalizedWeights(stylePreferences);
   const warmthBiasShift =
     stylePreferences?.tempSensitivity === "cold"
@@ -483,7 +525,8 @@ export function rankOutfits(args: {
         });
         const colorHarmonyScore = scoreColorHarmony(top, bottom, shoe);
         const styleConsistencyScore = scoreStyleConsistency(top, bottom, shoe);
-        const formalityAlignmentScore = scoreFormalityAlignment(top, bottom, shoe);
+        const formalityAlignmentScore = scoreFormalityAlignment(top, bottom, shoe, targetFormality);
+        const occasionScore = scoreOccasionStyle(occasion, top, bottom, shoe);
         const patternBalanceScore = scorePatternBalance(top, bottom, shoe);
         const warmthCoherenceScore = scoreWarmthCoherence(
           temperatureC,
@@ -508,7 +551,8 @@ export function rankOutfits(args: {
           styleConsistencyScore * weights.style +
           formalityAlignmentScore * weights.formality +
           patternBalanceScore * weights.pattern +
-          warmthCoherenceScore * weights.warmth -
+          warmthCoherenceScore * weights.warmth +
+          occasionScore * OCCASION_WEIGHT -
           historyPenalty * 0.1 -
           metadataCompletenessPenalty;
 
@@ -529,6 +573,7 @@ export function rankOutfits(args: {
             formalityAlignmentScore,
             patternBalanceScore,
             warmthCoherenceScore,
+            occasionScore,
             historyPenalty,
             unknownAttributeCount,
             metadataCompletenessPenalty,

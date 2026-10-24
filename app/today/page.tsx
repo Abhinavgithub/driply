@@ -14,6 +14,7 @@ import { isHandledFetchError } from "@/lib/fetch-utils";
 import { useApiFetch } from "@/lib/hooks/use-api-fetch";
 import { useAuthUser } from "@/lib/hooks/use-auth-user";
 import { useRecommendations } from "@/lib/hooks/use-recommendations";
+import { OCCASION_LABELS, OCCASIONS, type Occasion } from "@/lib/occasion";
 import type { ProfileResponse, RecommendationOption, WornHistoryItem } from "@/lib/types/wardrobe";
 
 type UserProfile = {
@@ -55,7 +56,15 @@ export default function TodayPage() {
   const viewDate = useMemo(() => localDateFromToday(dayOffset), [dayOffset]);
   const viewDateKey = useMemo(() => getLocalDateKey(viewDate), [viewDate]);
 
-  const rec = useRecommendations({ savedLocationKey, dateKey: viewDateKey });
+  // Chip the user tapped for the day on screen; null = server default (the
+  // remembered pick for that weekday, else the quiz dress code).
+  const [occasionPick, setOccasionPick] = useState<Occasion | null>(null);
+  const rec = useRecommendations({
+    savedLocationKey,
+    dateKey: viewDateKey,
+    occasion: occasionPick,
+  });
+  const activeOccasion = occasionPick ?? rec.resolvedOccasion;
   const viewDateFormatted = useMemo(
     () =>
       viewDate.toLocaleDateString("en-US", {
@@ -121,6 +130,15 @@ export default function TodayPage() {
     void loadInitial();
   }, [authReady, loadInitial]);
 
+  function onPickOccasion(occasion: Occasion) {
+    if (occasion === activeOccasion) return;
+    setOccasionPick(occasion);
+    // Remember it for this weekday; best-effort, the pick already applies.
+    const form = new FormData();
+    form.set("occasionPick", JSON.stringify({ dateKey: viewDateKey, occasion }));
+    void apiFetch("/api/profile", { method: "PATCH", body: form }).catch(() => {});
+  }
+
   async function onMarkWorn() {
     if (!current) return;
     setActionError(null);
@@ -133,6 +151,7 @@ export default function TodayPage() {
           topItemId: current.top.id,
           bottomItemId: current.bottom.id,
           shoeItemId: current.shoe.id,
+          occasion: activeOccasion ?? undefined,
         }),
       });
       const historyId = json.history?.id;
@@ -233,7 +252,10 @@ export default function TodayPage() {
                   role="radio"
                   aria-checked={isSelected}
                   disabled={rec.loading}
-                  onClick={() => setDayOffset(day.offset)}
+                  onClick={() => {
+                    setDayOffset(day.offset);
+                    setOccasionPick(null);
+                  }}
                   className={`rounded-full border px-3 py-1 text-xs transition ${
                     isSelected
                       ? "border-ink bg-ink font-bold text-ink-foreground"
@@ -254,6 +276,32 @@ export default function TodayPage() {
           >
             Weather data by Open-Meteo.com
           </a>
+        </div>
+      ) : null}
+
+      {/* ── Occasion ── */}
+      {!rec.needs ? (
+        <div role="radiogroup" aria-label="What's the day for?" className="flex flex-wrap gap-1.5">
+          {OCCASIONS.map((occasion) => {
+            const isSelected = activeOccasion === occasion;
+            return (
+              <button
+                key={occasion}
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                disabled={rec.loading}
+                onClick={() => onPickOccasion(occasion)}
+                className={`rounded-full border px-3 py-1 text-xs transition ${
+                  isSelected
+                    ? "border-accent-soft bg-accent-soft font-bold text-[var(--accent-strong)]"
+                    : "border-border font-medium text-foreground hover:border-foreground/50"
+                }`}
+              >
+                {OCCASION_LABELS[occasion]}
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
