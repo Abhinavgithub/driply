@@ -74,6 +74,28 @@ export function getTryOnWorkerSecret() {
   return readOptional("TRYON_WORKER_SECRET");
 }
 
+// ── Weather (Open-Meteo) ──
+// The free tier needs neither. A paid plan (required for commercial use)
+// issues an API key that only works on its customer host, so both are set
+// together when upgrading; no code change needed.
+export const DEFAULT_OPEN_METEO_BASE_URL = "https://api.open-meteo.com";
+
+export function getOpenMeteoBaseUrl() {
+  return (readOptional("OPEN_METEO_BASE_URL") ?? DEFAULT_OPEN_METEO_BASE_URL).replace(/\/+$/, "");
+}
+
+export const DEFAULT_OPEN_METEO_GEOCODING_BASE_URL = "https://geocoding-api.open-meteo.com";
+
+export function getOpenMeteoGeocodingBaseUrl() {
+  return (
+    readOptional("OPEN_METEO_GEOCODING_BASE_URL") ?? DEFAULT_OPEN_METEO_GEOCODING_BASE_URL
+  ).replace(/\/+$/, "");
+}
+
+export function getOpenMeteoApiKey() {
+  return readOptional("OPEN_METEO_API_KEY");
+}
+
 const ALWAYS_REQUIRED = [
   "DATABASE_URL",
   "NEXT_PUBLIC_SUPABASE_URL",
@@ -117,6 +139,22 @@ export function validateEnv(): { warnings: string[] } {
     } catch {
       errors.push("NEXT_PUBLIC_APP_URL is not a valid URL");
     }
+  }
+  const openMeteoBaseUrl = process.env.OPEN_METEO_BASE_URL?.trim();
+  for (const name of ["OPEN_METEO_BASE_URL", "OPEN_METEO_GEOCODING_BASE_URL"] as const) {
+    const value = process.env[name]?.trim();
+    if (!value) continue;
+    try {
+      const u = new URL(value);
+      if (u.protocol !== "https:") warnings.push(`${name} should use https://`);
+    } catch {
+      errors.push(`${name} is not a valid URL`);
+    }
+  }
+  if (process.env.OPEN_METEO_API_KEY?.trim() && !openMeteoBaseUrl) {
+    warnings.push(
+      "OPEN_METEO_API_KEY is set but OPEN_METEO_BASE_URL is not; paid keys only work on the customer host (e.g. https://customer-api.open-meteo.com).",
+    );
   }
   const dbUrl = process.env.DATABASE_URL?.trim();
   if (dbUrl && !dbUrl.startsWith("postgresql://") && !dbUrl.startsWith("postgres://")) {

@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import type { LocationSource } from "@/lib/saved-location";
-import type { RecommendationOption } from "@/lib/types/wardrobe";
+import { formatWeatherTimeline } from "@/lib/weather-format";
+import type { DayWeather, RecommendationOption } from "@/lib/types/wardrobe";
 
 function getMoodConfig(tempC: number, isRaining: boolean, hour = new Date().getHours()) {
   const isNight = hour >= 20 || hour < 6;
@@ -43,6 +44,10 @@ function getMoodConfig(tempC: number, isRaining: boolean, hour = new Date().getH
 
 type MoodBannerProps = {
   option: RecommendationOption;
+  weather: DayWeather | null;
+  /** The day being dressed for (local). */
+  viewDate: Date;
+  isTomorrow: boolean;
   displayName: string | null;
   locationSource: LocationSource;
   activeLocationLabel: string | null;
@@ -51,6 +56,9 @@ type MoodBannerProps = {
 /** Weather-mood hero banner with animated gradient, glow, and particles. */
 export function MoodBanner({
   option,
+  weather,
+  viewDate,
+  isTomorrow,
   displayName,
   locationSource,
   activeLocationLabel,
@@ -60,12 +68,12 @@ export function MoodBanner({
   const glowRef = useRef<HTMLDivElement | null>(null);
 
   const localDateFormatted = useMemo(() => {
-    return new Date().toLocaleDateString("en-US", {
+    return viewDate.toLocaleDateString("en-US", {
       weekday: "short",
       month: "short",
       day: "numeric",
     });
-  }, []);
+  }, [viewDate]);
   const greeting = useMemo(() => {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -73,9 +81,16 @@ export function MoodBanner({
     return "Good evening";
   }, []);
 
+  // Scored values are the day window's coldest feels-like and rain-day flag.
+  const coldestC = weather?.minFeelsLikeC ?? option.debugScores.temperatureC;
+  const warmestC = weather?.maxFeelsLikeC ?? option.debugScores.temperatureC;
+  const isRainDay = weather?.isRainDay ?? option.debugScores.isRaining;
+  const timeline = weather ? formatWeatherTimeline(weather) : null;
+
   const mood = useMemo(
-    () => getMoodConfig(option.debugScores.temperatureC, option.debugScores.isRaining),
-    [option],
+    // Tomorrow is shown with its daytime mood, never "night".
+    () => getMoodConfig(coldestC, isRainDay, isTomorrow ? 12 : undefined),
+    [coldestC, isRainDay, isTomorrow],
   );
 
   useEffect(() => {
@@ -109,20 +124,28 @@ export function MoodBanner({
       <div className="mood-content">
         <div>
           <div className="mood-date">
-            Today · <span>{localDateFormatted}</span>
+            {isTomorrow ? "Tomorrow" : "Today"} · <span>{localDateFormatted}</span>
           </div>
           <div className="mood-sub">
             {displayName ? (
               <>
                 {greeting}, <strong>{displayName}</strong> - Here&apos;s your look
+                {isTomorrow ? " for tomorrow" : ""}
               </>
             ) : (
-              "Here's your look for today"
+              `Here's your look for ${isTomorrow ? "tomorrow" : "today"}`
             )}
           </div>
+          {timeline ? <div className="mood-timeline">{timeline}</div> : null}
         </div>
         <div className="mood-weather">
-          <div className="mood-temp">{option.debugScores.temperatureC.toFixed(0)}°</div>
+          <div className="mood-temp">
+            {weather?.isToday
+              ? `${weather.currentTempC.toFixed(0)}°`
+              : weather
+                ? `${coldestC.toFixed(0)}–${warmestC.toFixed(0)}°`
+                : `${option.debugScores.temperatureC.toFixed(0)}°`}
+          </div>
           <div className="mood-desc">
             {mood.desc}
             {locationSource === "device"
@@ -132,12 +155,10 @@ export function MoodBanner({
                 : ""}
           </div>
           <div className="mood-wpills">
-            {option.debugScores.isRaining && <span className="mood-wpill">Carry Umbrella</span>}
-            {option.debugScores.temperatureC > 28 && <span className="mood-wpill">UV High</span>}
-            {option.debugScores.temperatureC > 25 && !option.debugScores.isRaining && (
-              <span className="mood-wpill">Humid</span>
-            )}
-            {option.debugScores.temperatureC < 10 && <span className="mood-wpill">Layer Up</span>}
+            {isRainDay && <span className="mood-wpill">Carry Umbrella</span>}
+            {warmestC > 28 && <span className="mood-wpill">UV High</span>}
+            {warmestC > 25 && !isRainDay && <span className="mood-wpill">Humid</span>}
+            {coldestC < 10 && <span className="mood-wpill">Layer Up</span>}
             {option.decisionSource !== "ai" && <span className="mood-wpill">Fallback</span>}
           </div>
         </div>

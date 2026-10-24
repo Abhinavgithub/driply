@@ -77,6 +77,8 @@ type StylistChatCardProps = {
   displayName: string | null;
   hasTryOnPhoto: boolean;
   marked: boolean;
+  /** False when previewing a future day: it can't have been worn yet. */
+  canMarkWorn?: boolean;
   loading: boolean;
   onMarkWorn: () => void;
   onShowAnother: () => void;
@@ -88,6 +90,7 @@ export function StylistChatCard({
   displayName,
   hasTryOnPhoto,
   marked,
+  canMarkWorn = true,
   loading,
   onMarkWorn,
   onShowAnother,
@@ -202,7 +205,7 @@ export function StylistChatCard({
         <button
           type="button"
           onClick={onMarkWorn}
-          disabled={marked}
+          disabled={marked || !canMarkWorn}
           className="button-primary"
           style={{
             borderRadius: 100,
@@ -212,7 +215,7 @@ export function StylistChatCard({
             fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
           }}
         >
-          {marked ? "Worn today ✓" : "Mark as worn"}
+          {marked ? "Worn today ✓" : canMarkWorn ? "Mark as worn" : "Wear it tomorrow"}
         </button>
         <button
           type="button"
