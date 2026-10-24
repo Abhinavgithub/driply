@@ -68,7 +68,7 @@ Driply is a wardrobe assistant: users upload clothing photos, AI classifies them
 - `lib/types/wardrobe.ts` — shared client-side shapes of API responses (`WardrobeItem`, `RecommendationOption`, `ProfileResponse`, …); import these instead of re-declaring per page
 - `lib/item-media.ts` — Supabase Storage upload/delete/sign helpers for wardrobe item photos
 - `lib/profile-media.ts` — Storage helpers for profile photos; avatar at `profiles/{userId}/avatar.{ext}`, try-on at `profiles/{userId}/tryon.{ext}`; `downloadStorageObject()` for server-side byte downloads
-- `lib/openMeteo.ts` — Open-Meteo hourly forecast (`fetchForecast`, cached 10 min per location) reduced by `summarizeDayWeather()` to a `DayWeather` for the day window: 8am–8pm local (today starts at the current hour; after 8pm, the hours left). Outfits are scored against the window's coldest feels-like temperature, and it's a rain day if any window hour has a ≥40% rain chance or ≥0.1mm. `lib/weather-format.ts` renders the one-line timeline on `/today`
+- `lib/openMeteo.ts` — Open-Meteo hourly forecast (`fetchForecast`, cached 10 min per location) reduced by `summarizeDayWeather()` to a `DayWeather` for the day window: 8am–8pm local (today starts at the current hour; after 8pm, the hours left). Outfits are scored against the window's coldest feels-like temperature, and it's a rain day if any window hour has a ≥40% rain chance or ≥0.1mm. `lib/weather-format.ts` renders the one-line timeline on `/today`. If upstream fails, a cached forecast up to 3h old is served instead of a 502. `/today` shows the "Weather data by Open-Meteo.com" link required by its CC BY 4.0 licence — keep it wherever weather data is shown
 
 **Database (Prisma + Supabase Postgres):**
 - `User` — synced from Supabase Auth on first login; extended with `displayName`, `uploadedAvatarUrl`, `aiTryOnPhotoUrl`, `aiTryOnPhotoMimeType` (user-controlled, never overwritten by OAuth sync)
@@ -106,6 +106,11 @@ GEMINI_TRYON_MODEL=gemini-2.5-flash-image
 HF_TOKEN=                    # required when TRYON_PROVIDER=flux
 OPENAI_API_KEY=              # required when TRYON_PROVIDER=openai
 OPENAI_TRYON_MODEL=gpt-image-2  # default; override to pin a snapshot
+# Open-Meteo: leave unset on the free (non-commercial) tier. A paid plan —
+# required once the app has ads/subscriptions — sets the customer host + key.
+OPEN_METEO_BASE_URL=            # default https://api.open-meteo.com
+OPEN_METEO_GEOCODING_BASE_URL=  # default https://geocoding-api.open-meteo.com
+OPEN_METEO_API_KEY=
 ```
 
 Configure Google OAuth in Supabase with redirect URL `http://localhost:3000/auth/callback`.

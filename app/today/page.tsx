@@ -217,32 +217,43 @@ export default function TodayPage() {
 
       {/* ── Today / Tomorrow ── */}
       {!rec.needs ? (
-        <div role="radiogroup" aria-label="Day to dress for" className="flex gap-1.5">
-          {(
-            [
-              { offset: 0, label: "Today" },
-              { offset: 1, label: "Tomorrow" },
-            ] as const
-          ).map((day) => {
-            const isSelected = dayOffset === day.offset;
-            return (
-              <button
-                key={day.offset}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                disabled={rec.loading}
-                onClick={() => setDayOffset(day.offset)}
-                className={`rounded-full border px-3 py-1 text-xs transition ${
-                  isSelected
-                    ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
-                    : "border-border font-medium text-foreground hover:border-foreground/50"
-                }`}
-              >
-                {day.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div role="radiogroup" aria-label="Day to dress for" className="flex gap-1.5">
+            {(
+              [
+                { offset: 0, label: "Today" },
+                { offset: 1, label: "Tomorrow" },
+              ] as const
+            ).map((day) => {
+              const isSelected = dayOffset === day.offset;
+              return (
+                <button
+                  key={day.offset}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={rec.loading}
+                  onClick={() => setDayOffset(day.offset)}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    isSelected
+                      ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
+                      : "border-border font-medium text-foreground hover:border-foreground/50"
+                  }`}
+                >
+                  {day.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Required by Open-Meteo's CC BY 4.0 licence wherever its data is shown. */}
+          <a
+            href="https://open-meteo.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs muted-copy underline underline-offset-2"
+          >
+            Weather data by Open-Meteo.com
+          </a>
         </div>
       ) : null}
 

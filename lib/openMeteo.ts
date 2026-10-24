@@ -1,3 +1,5 @@
+import { getOpenMeteoApiKey, getOpenMeteoBaseUrl, getOpenMeteoGeocodingBaseUrl } from "@/lib/env";
+
 /** Hourly forecast columns as returned by Open-Meteo with `timezone=auto`. */
 export type HourlyForecast = {
   /** Local wall-clock times, e.g. "2026-10-24T08:00". */
@@ -58,9 +60,13 @@ export const DAY_WINDOW_END_HOUR = 20;
 export const RAIN_CHANCE_THRESHOLD_PCT = 40;
 const RAINY_HOUR_PRECIP_MM = 0.1;
 
-type CachedForecast = { result: ForecastResponse; expiresAt: number };
+type CachedForecast = { result: ForecastResponse; fetchedAt: number };
 const forecastCache = new Map<string, CachedForecast>();
 const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+// The free tier has no uptime promise and rate-limits per IP (shared on
+// Netlify), so an upstream failure serves the last forecast for this
+// location if it is younger than this, instead of failing the request.
+export const WEATHER_STALE_FALLBACK_MS = 3 * 60 * 60 * 1000; // 3 hours
 // Bound per-instance memory: random coords must not grow the Map forever.
 const MAX_CACHE_ENTRIES = 500;
 // Callers treat weather as optional; a hung upstream request must not stall
@@ -76,13 +82,41 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
   // 4-decimal precision (~11m): toFixed(2) collided locations ~1.1km apart.
   const cacheKey = `${lat.toFixed(4)}_${lon.toFixed(4)}`;
   const cached = forecastCache.get(cacheKey);
-  // Per-key TTL check (no O(n) full-map sweep on every request).
-  if (cached) {
-    if (cached.expiresAt > Date.now()) return cached.result;
-    forecastCache.delete(cacheKey);
-  }
+  // Per-key TTL check (no O(n) full-map sweep on every request). Expired
+  // entries are kept as the stale fallback until the next successful fetch.
+  if (cached && Date.now() - cached.fetchedAt < WEATHER_CACHE_TTL_MS) return cached.result;
 
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
+  try {
+    const result = await requestForecast(lat, lon);
+    // Re-insert so Map order tracks recency for the eviction below.
+    forecastCache.delete(cacheKey);
+    if (forecastCache.size >= MAX_CACHE_ENTRIES) {
+      // Evict the oldest entry (Map preserves insertion order).
+      const oldest = forecastCache.keys().next();
+      if (!oldest.done) forecastCache.delete(oldest.value);
+    }
+    forecastCache.set(cacheKey, { result, fetchedAt: Date.now() });
+    return result;
+  } catch (error) {
+    if (cached && Date.now() - cached.fetchedAt < WEATHER_STALE_FALLBACK_MS) {
+      console.warn("[weather] upstream failed, serving stale forecast", {
+        ageMinutes: Math.round((Date.now() - cached.fetchedAt) / 60_000),
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return cached.result;
+    }
+    if (cached) forecastCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+/** Test hook: clears the per-instance forecast cache. */
+export function clearForecastCache() {
+  forecastCache.clear();
+}
+
+async function requestForecast(lat: number, lon: number): Promise<ForecastResponse> {
+  const url = new URL(`${getOpenMeteoBaseUrl()}/v1/forecast`);
   url.searchParams.set("latitude", lat.toString());
   url.searchParams.set("longitude", lon.toString());
   url.searchParams.set("current", "temperature_2m,apparent_temperature,precipitation");
@@ -92,6 +126,8 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
   );
   url.searchParams.set("forecast_days", "3");
   url.searchParams.set("timezone", "auto");
+  const apiKey = getOpenMeteoApiKey();
+  if (apiKey) url.searchParams.set("apikey", apiKey);
 
   let res: Response;
   try {
@@ -120,14 +156,7 @@ export async function fetchForecast(lat: number, lon: number): Promise<ForecastR
     throw new Error("Weather response missing expected fields.");
   }
 
-  const result: ForecastResponse = { current, hourly: json.hourly };
-  if (forecastCache.size >= MAX_CACHE_ENTRIES) {
-    // Evict the oldest entry (Map preserves insertion order).
-    const oldest = forecastCache.keys().next();
-    if (!oldest.done) forecastCache.delete(oldest.value);
-  }
-  forecastCache.set(cacheKey, { result, expiresAt: Date.now() + WEATHER_CACHE_TTL_MS });
-  return result;
+  return { current, hourly: json.hourly };
 }
 
 /**
@@ -244,11 +273,13 @@ export async function searchLocations(query: string): Promise<GeocodingResult[]>
   const trimmed = query.trim().slice(0, 100);
   if (!trimmed) return [];
 
-  const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
+  const url = new URL(`${getOpenMeteoGeocodingBaseUrl()}/v1/search`);
   url.searchParams.set("name", trimmed);
   url.searchParams.set("count", "5");
   url.searchParams.set("language", "en");
   url.searchParams.set("format", "json");
+  const apiKey = getOpenMeteoApiKey();
+  if (apiKey) url.searchParams.set("apikey", apiKey);
 
   let res: Response;
   try {

@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { summarizeDayWeather, type ForecastResponse } from "@/lib/openMeteo";
+import {
+  clearForecastCache,
+  fetchForecast,
+  summarizeDayWeather,
+  WEATHER_STALE_FALLBACK_MS,
+  type ForecastResponse,
+} from "@/lib/openMeteo";
 
 // Shape of an Open-Meteo `timezone=auto` response: local wall-clock times,
 // 24 hourly rows per day. Values are built per hour so each test can read
@@ -178,5 +184,78 @@ describe("summarizeDayWeather", () => {
     );
     expect(day.source).toBe("current");
     expect(day.isToday).toBe(false);
+  });
+});
+
+describe("fetchForecast", () => {
+  const body = {
+    current: { time: "2026-10-24T09:00", temperature_2m: 12, precipitation: 0 },
+    hourly: { time: [] },
+  };
+  const ok = () => new Response(JSON.stringify(body), { status: 200 });
+  let now = Date.UTC(2026, 9, 24, 9);
+
+  beforeEach(() => {
+    clearForecastCache();
+    now = Date.UTC(2026, 9, 24, 9);
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("serves the cache for 10 minutes without calling upstream", async () => {
+    const fetchMock = vi.fn(async () => ok());
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchForecast(51.5, -0.12);
+    now += 9 * 60_000;
+    await fetchForecast(51.5, -0.12);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves a stale forecast when upstream fails within the fallback window", async () => {
+    const fetchMock = vi.fn(async () => ok());
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchForecast(51.5, -0.12);
+
+    fetchMock.mockImplementation(async () => new Response("", { status: 429 }));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    now += 2 * 60 * 60_000;
+    await expect(fetchForecast(51.5, -0.12)).resolves.toEqual(body);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("fails once the cached forecast is older than the fallback window", async () => {
+    const fetchMock = vi.fn(async () => ok());
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchForecast(51.5, -0.12);
+
+    fetchMock.mockImplementation(async () => new Response("", { status: 500 }));
+    now += WEATHER_STALE_FALLBACK_MS + 1;
+    await expect(fetchForecast(51.5, -0.12)).rejects.toThrow(/status 500/);
+  });
+
+  it("fails on a cold cache when upstream fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed");
+      }),
+    );
+    await expect(fetchForecast(51.5, -0.12)).rejects.toThrow("fetch failed");
+  });
+
+  it("uses the configured base URL and API key for a paid plan", async () => {
+    vi.stubEnv("OPEN_METEO_BASE_URL", "https://customer-api.open-meteo.com/");
+    vi.stubEnv("OPEN_METEO_API_KEY", "test-key");
+    const fetchMock = vi.fn<(url: string) => Promise<Response>>(async () => ok());
+    vi.stubGlobal("fetch", fetchMock);
+    await fetchForecast(51.5, -0.12);
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.origin + url.pathname).toBe("https://customer-api.open-meteo.com/v1/forecast");
+    expect(url.searchParams.get("apikey")).toBe("test-key");
   });
 });
