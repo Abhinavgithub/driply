@@ -1,8 +1,11 @@
 import type { ItemAttributeValues } from "@/lib/itemAttributes";
+import type { DayWeather } from "@/lib/openMeteo";
 import type { StylePreferences } from "@/lib/style-preferences";
 
 // Client-side shapes of API responses, shared across pages so they can't
 // drift apart. Server routes remain the source of truth.
+
+export type { DayWeather };
 
 export type ItemKind = "TOP" | "BOTTOM" | "SHOE";
 export type AnalysisStatus = "PENDING" | "READY" | "FAILED" | "SKIPPED";
@@ -59,6 +62,8 @@ export type RecommendationOption = {
 /** GET /api/recommendations (plural, paginated). */
 export type RecommendationOptionsResponse = {
   dateKey: string;
+  /** Day-window weather summary the options were scored against. */
+  weather: DayWeather;
   options: RecommendationOption[];
   offset: number;
   limit: number;

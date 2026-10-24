@@ -8,6 +8,8 @@ import type {
   WarmthLevel,
 } from "@prisma/client";
 
+import { formatHour } from "@/lib/date-utils";
+import type { DayWeather } from "@/lib/openMeteo";
 import type { StylePreferences } from "@/lib/style-preferences";
 
 export type ItemWithAttributes = Pick<
@@ -379,6 +381,7 @@ export function recommendOutfit(args: {
   shoes: ItemWithAttributes[];
   wornItemIds: Set<string>;
   stylePreferences?: StylePreferences | null;
+  isRainDay?: boolean;
 }): RecommendationResult {
   const ranked = rankOutfits({
     ...args,
@@ -400,6 +403,11 @@ export function rankOutfits(args: {
   offset: number;
   limit: number;
   stylePreferences?: StylePreferences | null;
+  /**
+   * Rain-day flag from the day's forecast window. When omitted it falls back
+   * to "any precipitation in `precipitationMm`" (the old live-reading rule).
+   */
+  isRainDay?: boolean;
 }): RecommendationResult[] {
   const {
     dateKey,
@@ -413,7 +421,7 @@ export function rankOutfits(args: {
     limit,
     stylePreferences,
   } = args;
-  const isRaining = precipitationMm >= 0.1;
+  const isRaining = args.isRainDay ?? precipitationMm >= 0.1;
   const weights = getPersonalizedWeights(stylePreferences);
   const warmthBiasShift =
     stylePreferences?.tempSensitivity === "cold"
@@ -594,9 +602,19 @@ export function formatOutfitExplanation(args: {
   top: ItemWithAttributes;
   bottom: ItemWithAttributes;
   shoe: ItemWithAttributes;
+  /** Day-window context; names the deciding hour when the forecast spans several. */
+  day?: Pick<
+    DayWeather,
+    | "source"
+    | "isRainDay"
+    | "minFeelsLikeHour"
+    | "windowStartHour"
+    | "windowEndHour"
+    | "rainStartHour"
+  >;
 }) {
-  const { temperatureC, precipitationMm, top, bottom, shoe } = args;
-  const isRaining = precipitationMm >= 0.1;
+  const { temperatureC, precipitationMm, top, bottom, shoe, day } = args;
+  const isRaining = day?.isRainDay ?? precipitationMm >= 0.1;
 
   const tempLabel =
     temperatureC < 0
@@ -617,9 +635,14 @@ export function formatOutfitExplanation(args: {
     .filter((value): value is string => Boolean(value))
     .slice(0, 2);
 
-  const weatherLead = isRaining
-    ? `It's ${tempLabel} with rain, so this combo stays weather-appropriate.`
-    : `It's ${tempLabel}, and this combo fits the weather.`;
+  const spansDay = day?.source === "forecast" && day.windowEndHour > day.windowStartHour;
+  const weatherLead = spansDay
+    ? isRaining && day.rainStartHour !== null
+      ? `It feels ${tempLabel} at its coldest around ${formatHour(day.minFeelsLikeHour)}, with rain likely from ${formatHour(day.rainStartHour)}, so this combo is built for the whole day.`
+      : `It feels ${tempLabel} at its coldest around ${formatHour(day.minFeelsLikeHour)}, so this combo is built for the whole day.`
+    : isRaining
+      ? `It's ${tempLabel} with rain, so this combo stays weather-appropriate.`
+      : `It's ${tempLabel}, and this combo fits the weather.`;
 
   if (!reasons.length) return weatherLead;
 

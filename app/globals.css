@@ -421,6 +421,13 @@ textarea {
   /* Legibility over the animated gradient blends (P2-5). */
   text-shadow: 0 1px 8px oklch(0% 0 0 / 0.45);
 }
+.mood-timeline {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: oklch(94% 0.03 80);
+  text-shadow: 0 1px 8px oklch(0% 0 0 / 0.45);
+}
 .mood-weather {
   display: flex;
   flex-direction: column;

@@ -371,3 +371,54 @@ describe("rankOutfits input validation and sampling", () => {
     expect(first.length).toBeGreaterThan(0);
   });
 });
+
+describe("day-window weather inputs", () => {
+  const sandals = makeItem({ id: "s2", kind: "SHOE", subtype: "sandals" });
+  const boots = makeItem({ id: "s3", kind: "SHOE", subtype: "boots", warmthLevel: "WARM" });
+
+  function rankShoes(isRainDay: boolean | undefined) {
+    return rankOutfits({
+      dateKey: DATE,
+      temperatureC: 16,
+      precipitationMm: 0,
+      tops: [summerTop],
+      bottoms: [summerBottom],
+      shoes: [sandals, boots],
+      wornItemIds: new Set(),
+      offset: 0,
+      limit: 2,
+      isRainDay,
+    });
+  }
+
+  it("treats a forecast rain day as rainy even with no rain right now", () => {
+    const [best] = rankShoes(true);
+    expect(best.debugScores.isRaining).toBe(true);
+    expect(best.shoe.id).toBe("s3");
+  });
+
+  it("falls back to the precipitation rule when isRainDay is omitted", () => {
+    const [best] = rankShoes(undefined);
+    expect(best.debugScores.isRaining).toBe(false);
+  });
+
+  it("names the coldest hour and rain start in the explanation", () => {
+    const text = formatOutfitExplanation({
+      temperatureC: 9,
+      precipitationMm: 1.2,
+      top: summerTop,
+      bottom: summerBottom,
+      shoe: summerShoe,
+      day: {
+        source: "forecast",
+        isRainDay: true,
+        minFeelsLikeHour: 19,
+        windowStartHour: 8,
+        windowEndHour: 20,
+        rainStartHour: 17,
+      },
+    });
+    expect(text).toContain("coldest around 7pm");
+    expect(text).toContain("rain likely from 5pm");
+  });
+});

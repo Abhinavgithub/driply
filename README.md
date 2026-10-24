@@ -5,7 +5,8 @@ A wardrobe assistant that recommends daily outfits based on the weather and your
 ## Features
 
 - Upload clothing photos — AI classifies kind, subtype, color, pattern, style, formality, and warmth automatically
-- Weather-aware outfit recommendations with a transparent scoring breakdown
+- Weather-aware outfit recommendations for the whole day (coldest hour and rain chance from 8am–8pm), with a transparent scoring breakdown
+- Plan tomorrow's outfit the night before with the Today / Tomorrow switch
 - Personalised scoring — a 5-question style quiz at onboarding adjusts recommendation weights to match your dress code, lifestyle, priorities, color palette, and temperature sensitivity
 - AI outfit re-ranking — Gemini selects the best candidate and explains why
 - AI try-on preview — see yourself wearing the recommended outfit (Gemini multimodal, OpenAI gpt-image-2, or FLUX text-to-image)

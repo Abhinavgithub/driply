@@ -6,6 +6,7 @@ import {
   isAiRecommenderEnabled,
   rerankOutfitCandidates,
 } from "@/lib/gemini";
+import type { DayWeather } from "@/lib/openMeteo";
 import {
   getRecommendationCandidateId,
   type ItemWithAttributes,
@@ -50,9 +51,10 @@ function itemSummary(item: ItemWithAttributes) {
 export async function applyAiRecommendationRerank(args: {
   temperatureC: number;
   precipitationMm: number;
+  day?: DayWeather;
   rankedOptions: RecommendationResult[];
 }) {
-  const { temperatureC, precipitationMm, rankedOptions } = args;
+  const { temperatureC, precipitationMm, day, rankedOptions } = args;
 
   if (!(await isAiRecommenderEnabled())) {
     console.info("[gemini:rerank] fallback", {
@@ -87,7 +89,20 @@ export async function applyAiRecommendationRerank(args: {
 
   try {
     const reranked = await rerankOutfitCandidates({
-      weather: { temperatureC, precipitationMm },
+      weather: {
+        temperatureC,
+        precipitationMm,
+        day:
+          day?.source === "forecast"
+            ? {
+                windowLocalHours: `${day.windowStartHour}:00-${day.windowEndHour}:00`,
+                coldestFeelsLikeC: day.minFeelsLikeC,
+                warmestFeelsLikeC: day.maxFeelsLikeC,
+                maxRainChancePct: day.maxRainChancePct,
+                isRainDay: day.isRainDay,
+              }
+            : undefined,
+      },
       candidates: shortlist.map((option) => ({
         candidateId: getRecommendationCandidateId(option),
         weatherScore: option.debugScores.weatherScore,

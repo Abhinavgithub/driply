@@ -5,7 +5,7 @@ import { applyAiRecommendationRerank } from "@/lib/aiRecommendation";
 import { withAuth } from "@/lib/api-guard";
 import { attachSignedPhotoUrls } from "@/lib/item-media";
 import { prisma } from "@/lib/prisma";
-import { fetchWeather } from "@/lib/openMeteo";
+import { fetchDayWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
 import { parseStylePreferences } from "@/lib/style-preferences";
 import { getServerDateKey, dateKeyToUtcStart } from "@/lib/date-utils";
@@ -76,7 +76,7 @@ export const GET = withAuth(
           },
         }),
       ]),
-      fetchWeather(lat, lon).catch(() => null),
+      fetchDayWeather(lat, lon, dateKey).catch(() => null),
       prisma.outfitHistory
         .findMany({
           where: { userId: currentUser.appUser.id, date: { gte: cutoff, lt: todayStart } },
@@ -105,8 +105,11 @@ export const GET = withAuth(
     }
 
     const weather = weatherResult;
-    const temperatureC = Math.round(weather.temperatureC * 2) / 2;
-    const precipitationMm = Math.round(weather.precipitationMm * 10) / 10;
+    // Score against the coldest feels-like hour of the day window and the
+    // window's rain total, so a morning check covers the evening too.
+    const temperatureC = Math.round(weather.minFeelsLikeC * 2) / 2;
+    const precipitationMm = Math.round(weather.totalPrecipMm * 10) / 10;
+    const isRainDay = weather.isRainDay;
 
     // Item ids are null when the item was deleted after the outfit was worn.
     const wornItemIds = new Set<string>();
@@ -127,6 +130,7 @@ export const GET = withAuth(
       offset: 0,
       limit: offset === 0 ? Math.max(limit, 6) : offset + limit,
       stylePreferences,
+      isRainDay,
     });
 
     const decision =
@@ -134,6 +138,7 @@ export const GET = withAuth(
         ? await applyAiRecommendationRerank({
             temperatureC,
             precipitationMm,
+            day: weather,
             rankedOptions: baseRankedOptions,
           })
         : {
@@ -170,6 +175,7 @@ export const GET = withAuth(
               top: option.top,
               bottom: option.bottom,
               shoe: option.shoe,
+              day: weather,
             }),
       decisionSource:
         decision.decisionSource === "ai" && option === rankedOptions[0] && offset === 0
@@ -187,6 +193,7 @@ export const GET = withAuth(
 
     return NextResponse.json({
       dateKey,
+      weather,
       options,
       offset,
       limit,
