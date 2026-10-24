@@ -173,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navItems = [
     {
       href: "/today",
-      label: "Home",
+      label: "Today",
       icon: (
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
           <path
@@ -218,174 +218,151 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     },
   ];
 
+  const avatar = (size: number) => (
+    <span
+      className="app-avatar"
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      aria-hidden={avatarUrl ? undefined : true}
+    >
+      {avatarUrl ? (
+        <ProfilePhotoImg
+          src={avatarUrl}
+          pick="avatar"
+          alt={displayName}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        displayName.charAt(0).toUpperCase()
+      )}
+    </span>
+  );
+
   return (
-    <div className="page-shell">
-      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link
-              href={user ? "/today" : "/"}
-              style={{
-                fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                fontWeight: 700,
-                fontSize: 20,
-                letterSpacing: "-0.03em",
-                color: "var(--foreground)",
-                textDecoration: "none",
-                flexShrink: 0,
-              }}
-            >
-              drip<span style={{ color: "oklch(75% 0.18 200)" }}>ly</span>
-            </Link>
-            {showAppNav ? (
-              <nav className="hidden items-center gap-1 md:flex">
-                {navItems.map((item) => {
-                  const active = pathname === item.href;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      style={{
-                        fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                        fontSize: 13,
-                        fontWeight: 500,
-                      }}
-                      className={`rounded-full px-3.5 py-1.5 transition ${
-                        active
-                          ? "bg-surface border border-border text-[oklch(75%_0.18_200)]"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            ) : null}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {showAppNav ? (
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--muted-foreground)",
-                  flexShrink: 0,
-                }}
-                aria-hidden="true"
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path
-                    d="M8 2a4 4 0 0 0-4 4v3l-1 1v1h10v-1l-1-1V6a4 4 0 0 0-4-4zM6.5 13a1.5 1.5 0 0 0 3 0"
-                    stroke="currentColor"
-                    strokeWidth="1.3"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            ) : null}
-
-            {user ? (
-              <div ref={profileMenuRef} className="relative">
-                <button
-                  ref={menuTriggerRef}
-                  type="button"
-                  onClick={() => setIsProfileMenuOpen((open) => !open)}
-                  aria-label="Open account menu"
-                  aria-expanded={isProfileMenuOpen}
-                  aria-haspopup="menu"
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: "oklch(75% 0.18 200 / 0.1)",
-                    border: "1px solid oklch(75% 0.18 200 / 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: "oklch(75% 0.18 200)",
-                    cursor: "pointer",
-                    overflow: "hidden",
-                    flexShrink: 0,
-                  }}
+    <div className="page-shell app-layout">
+      {showAppNav ? (
+        <aside className="app-sidebar" aria-label="Sidebar">
+          <Link href={user ? "/today" : "/"} className="app-logo app-logo-light">
+            driply
+          </Link>
+          <nav className="app-sidebar-nav" aria-label="Main navigation">
+            {navItems.map((item) => {
+              const active = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={`app-sidebar-link${active ? " active" : ""}`}
                 >
-                  {avatarUrl ? (
-                    <ProfilePhotoImg
-                      src={avatarUrl}
-                      pick="avatar"
-                      alt={displayName}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    displayName.charAt(0).toUpperCase()
-                  )}
-                </button>
+                  {item.icon}
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <Link href="/library" className="app-sidebar-cta">
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path
+                d="M10 4v12M4 10h12"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+            Add clothes
+          </Link>
+          {user ? (
+            <div className="app-sidebar-user">
+              <Link href="/profile" className="app-sidebar-user-link">
+                {avatar(40)}
+                <span className="truncate">{displayName}</span>
+              </Link>
+              <button type="button" onClick={() => void onSignOut()} className="app-sidebar-logout">
+                Log out
+              </button>
+            </div>
+          ) : null}
+        </aside>
+      ) : null}
 
-                {isProfileMenuOpen ? (
-                  <div
-                    ref={menuRef}
-                    role="menu"
-                    aria-label="Account menu"
-                    className="profile-menu app-card absolute right-0 top-[calc(100%+0.6rem)] min-w-52 rounded-2xl p-2"
-                  >
-                    <div className="px-3 py-2" aria-hidden="true">
-                      <p className="text-sm font-semibold text-foreground">{displayName}</p>
-                    </div>
-                    <Link
-                      href="/profile"
-                      onClick={() => setIsProfileMenuOpen(false)}
-                      className="profile-menu-action block"
-                      role="menuitem"
-                    >
-                      Profile
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => void onSignOut()}
-                      className="profile-menu-action"
-                      role="menuitem"
-                    >
-                      Log out
-                    </button>
+      <div className="app-column">
+        <header className="app-topbar">
+          <Link href={user ? "/today" : "/"} className="app-logo">
+            driply
+          </Link>
+
+          {user ? (
+            <div ref={profileMenuRef} className="relative">
+              <button
+                ref={menuTriggerRef}
+                type="button"
+                onClick={() => setIsProfileMenuOpen((open) => !open)}
+                aria-label="Open account menu"
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="menu"
+                className="app-avatar-button"
+              >
+                {avatar(40)}
+              </button>
+
+              {isProfileMenuOpen ? (
+                <div
+                  ref={menuRef}
+                  role="menu"
+                  aria-label="Account menu"
+                  className="profile-menu app-card absolute right-0 top-[calc(100%+0.6rem)] min-w-52 rounded-2xl p-2"
+                >
+                  <div className="px-3 py-2" aria-hidden="true">
+                    <p className="text-sm font-semibold text-foreground">{displayName}</p>
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
+                  <Link
+                    href="/profile"
+                    onClick={() => setIsProfileMenuOpen(false)}
+                    className="profile-menu-action block"
+                    role="menuitem"
+                  >
+                    Profile
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => void onSignOut()}
+                    className="profile-menu-action"
+                    role="menuitem"
+                  >
+                    Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
-        {meta.showHeading ? (
-          <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">{meta.title}</h1>
-          </div>
-        ) : null}
-        {children}
-      </main>
+        <main className="app-main">
+          {meta.showHeading ? (
+            <div className="mb-6 flex items-center justify-between">
+              <h1 className="app-page-title">{meta.title}</h1>
+            </div>
+          ) : null}
+          {children}
+        </main>
+      </div>
 
       {showAppNav ? (
         <nav className="bottom-app-nav" aria-label="Mobile navigation">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`bottom-app-tab${pathname === item.href ? " active" : ""}`}
-            >
-              {item.icon}
-              <span className="bottom-app-tab-label">{item.label}</span>
-            </Link>
-          ))}
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`bottom-app-tab${active ? " active" : ""}`}
+              >
+                {item.icon}
+                <span className="bottom-app-tab-label">{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
       ) : null}
     </div>

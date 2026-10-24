@@ -185,7 +185,7 @@ export default function TodayPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="today-layout">
       {/* ── Mood Banner ── */}
       {current ? (
         <MoodBanner
@@ -210,7 +210,7 @@ export default function TodayPage() {
             }}
           >
             {isTomorrow ? "Tomorrow" : "Today"} ·{" "}
-            <span style={{ color: "oklch(75% 0.18 200)" }}>{viewDateFormatted}</span>
+            <span style={{ color: "var(--muted-foreground)" }}>{viewDateFormatted}</span>
           </span>
         </div>
       ) : null}
@@ -236,7 +236,7 @@ export default function TodayPage() {
                   onClick={() => setDayOffset(day.offset)}
                   className={`rounded-full border px-3 py-1 text-xs transition ${
                     isSelected
-                      ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
+                      ? "border-ink bg-ink font-bold text-ink-foreground"
                       : "border-border font-medium text-foreground hover:border-foreground/50"
                   }`}
                 >

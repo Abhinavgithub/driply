@@ -348,7 +348,7 @@ export default function ProfilePage() {
               <button
                 type="button"
                 onClick={() => avatarInputRef.current?.click()}
-                className="button-primary w-full"
+                className="button-secondary w-full"
               >
                 {effectiveAvatarSrc ? "Change photo" : "Upload photo"}
               </button>
@@ -360,6 +360,7 @@ export default function ProfilePage() {
           <input
             ref={avatarInputRef}
             type="file"
+            aria-label="Profile photo"
             accept="image/jpeg,image/png,image/webp"
             className="sr-only"
             onChange={onAvatarChange}
@@ -370,7 +371,9 @@ export default function ProfilePage() {
         <section className="sdna-section min-w-0">
           {dnaError ? (
             <div className="sdna-cta-card">
-              <div className="sdna-cta-icon">✦</div>
+              <div className="sdna-cta-icon" aria-hidden="true">
+                ✦
+              </div>
               <p className="sdna-cta-title">Generation failed</p>
               <p className="sdna-cta-desc">Something went wrong. Please try again.</p>
               <button type="button" onClick={triggerDnaRegeneration} className="sdna-cta-btn">
@@ -379,7 +382,9 @@ export default function ProfilePage() {
             </div>
           ) : dnaGenerating || dna?.textStatus === "GENERATING" || dna?.textStatus === "PENDING" ? (
             <div className="sdna-cta-card">
-              <div className="sdna-cta-icon">✦</div>
+              <div className="sdna-cta-icon" aria-hidden="true">
+                ✦
+              </div>
               <p className="sdna-cta-title">Generating your Style DNA...</p>
               <p className="sdna-cta-desc">This takes about 10–20 seconds. Check back shortly.</p>
             </div>
@@ -397,7 +402,9 @@ export default function ProfilePage() {
             />
           ) : (
             <div className="sdna-cta-card">
-              <div className="sdna-cta-icon">🧬</div>
+              <div className="sdna-cta-icon" aria-hidden="true">
+                ✦
+              </div>
               <p className="sdna-cta-title">Discover your Style DNA</p>
               <p className="sdna-cta-desc">
                 Complete the style quiz to generate your personalized fashion identity card.
@@ -450,7 +457,7 @@ export default function ProfilePage() {
                       }
                       className={`rounded-full border px-3 py-1 text-xs transition ${
                         isSelected
-                          ? "border-[oklch(72%_0.14_200)] bg-transparent font-bold text-[oklch(75%_0.18_200)]"
+                          ? "border-[var(--accent)] bg-transparent font-bold text-[var(--accent)]"
                           : "border-border font-medium text-foreground hover:border-foreground/50"
                       }`}
                     >
@@ -532,7 +539,7 @@ export default function ProfilePage() {
           <button
             type="button"
             onClick={() => tryOnInputRef.current?.click()}
-            className="button-primary"
+            className="button-secondary"
           >
             {profile?.hasTryOnPhoto || tryOnFile ? "Change photo" : "Upload full-body photo"}
           </button>
@@ -545,6 +552,7 @@ export default function ProfilePage() {
         <input
           ref={tryOnInputRef}
           type="file"
+          aria-label="Full-body try-on photo"
           accept="image/jpeg,image/png,image/webp"
           className="sr-only"
           onChange={onTryOnChange}

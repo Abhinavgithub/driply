@@ -300,7 +300,7 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
               type="button"
               onClick={regenerate}
               className="flex items-center gap-1.5 text-xs font-semibold"
-              style={{ color: "oklch(75% 0.18 200)" }}
+              style={{ color: "var(--accent)" }}
             >
               <RefreshIcon /> Regenerate
             </button>
@@ -309,8 +309,8 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
               onClick={onDownload}
               className="flex items-center gap-1.5 text-xs font-bold px-4 py-1.5"
               style={{
-                background: "oklch(75% 0.18 200)",
-                color: "oklch(9% 0.008 240)",
+                background: "var(--accent)",
+                color: "var(--accent-foreground)",
                 borderRadius: 999,
               }}
             >
@@ -353,13 +353,13 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
                 height: 44,
                 borderRadius: 14,
                 flexShrink: 0,
-                background: "oklch(75% 0.18 200 / 0.1)",
-                border: "1px solid oklch(75% 0.18 200 / 0.3)",
+                background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 20,
-                color: "oklch(75% 0.18 200)",
+                color: "var(--accent)",
               }}
             >
               ✦
@@ -386,8 +386,8 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              background: "oklch(75% 0.18 200)",
-              color: "oklch(9% 0.008 240)",
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
               fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
               fontSize: 12,
               fontWeight: 700,
@@ -419,13 +419,13 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
                 height: 44,
                 borderRadius: 14,
                 flexShrink: 0,
-                background: "oklch(75% 0.18 200 / 0.1)",
-                border: "1px solid oklch(75% 0.18 200 / 0.3)",
+                background: "color-mix(in srgb, var(--accent) 10%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: 20,
-                color: "oklch(75% 0.18 200)",
+                color: "var(--accent)",
               }}
             >
               ✦
@@ -453,8 +453,8 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
               display: "inline-flex",
               alignItems: "center",
               gap: 6,
-              background: "oklch(75% 0.18 200)",
-              color: "oklch(9% 0.008 240)",
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
               fontFamily: "var(--lp-font-display, 'Space Grotesk', sans-serif)",
               fontSize: 12,
               fontWeight: 700,
@@ -515,8 +515,8 @@ export const TryOnPreview = forwardRef<TryOnPreviewHandle, TryOnPreviewProps>(fu
             onClick={onDownload}
             className="flex items-center gap-1.5 text-xs font-bold px-4 py-1.5"
             style={{
-              background: "oklch(75% 0.18 200)",
-              color: "oklch(9% 0.008 240)",
+              background: "var(--accent)",
+              color: "var(--accent-foreground)",
               borderRadius: 999,
             }}
           >

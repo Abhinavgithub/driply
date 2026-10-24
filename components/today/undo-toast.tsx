@@ -19,7 +19,7 @@ export function UndoToast({ onUndo, onDismiss }: { onUndo: () => void; onDismiss
       aria-live="polite"
       style={{
         position: "fixed",
-        bottom: "calc(64px + 16px)",
+        bottom: "calc(64px + 28px)",
         left: "50%",
         transform: "translateX(-50%)",
         zIndex: 50,
@@ -30,7 +30,7 @@ export function UndoToast({ onUndo, onDismiss }: { onUndo: () => void; onDismiss
         border: "1px solid var(--border)",
         borderRadius: 9999,
         padding: "10px 16px 10px 20px",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
+        boxShadow: "0 8px 24px rgba(42, 36, 32, 0.18)",
         whiteSpace: "nowrap",
         minWidth: 240,
         maxWidth: "calc(100vw - 32px)",
@@ -52,7 +52,7 @@ export function UndoToast({ onUndo, onDismiss }: { onUndo: () => void; onDismiss
         style={{
           fontSize: 13,
           fontWeight: 700,
-          color: "oklch(75% 0.18 200)",
+          color: "var(--accent)",
           background: "none",
           border: "none",
           cursor: "pointer",

@@ -13,12 +13,7 @@ function getStrength(val: string): { pct: number; color: string } {
   if (/[A-Z]/.test(val)) score++;
   if (/[0-9]/.test(val)) score++;
   if (/[^A-Za-z0-9]/.test(val)) score++;
-  const colors = [
-    "oklch(65% 0.18 25)",
-    "oklch(70% 0.16 50)",
-    "oklch(78% 0.16 118)",
-    "oklch(75% 0.18 200)",
-  ];
+  const colors = ["var(--danger)", "oklch(70% 0.16 50)", "oklch(78% 0.16 118)", "var(--accent)"];
   return { pct: (score / 4) * 100, color: colors[Math.max(0, score - 1)] };
 }
 
