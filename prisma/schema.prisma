@@ -79,6 +79,14 @@ enum DnaAssetStatus {
   FAILED
 }
 
+/// What a day's outfit was for; mirrors `Occasion` in lib/occasion.ts.
+enum Occasion {
+  CASUAL
+  WORK
+  GOING_OUT
+  ACTIVE
+}
+
 enum TryOnJobStatus {
   PENDING
   RUNNING
@@ -102,6 +110,8 @@ model User {
   aiTryOnPhotoUrl      String?
   aiTryOnPhotoMimeType String?
   stylePreferences     Json?
+  /// Last occasion picked per weekday on /today, e.g. {"mon":"work","sat":"casual"}.
+  occasionByWeekday    Json?
   lastDnaRegenAt       DateTime?
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
@@ -202,6 +212,8 @@ model OutfitHistory {
   topItemId    String?
   bottomItemId String?
   shoeItemId   String?
+  /// Occasion picked when the outfit was logged; null for rows logged before it existed.
+  occasion     Occasion?
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   topItem      Item?    @relation("OutfitHistoryTop", fields: [topItemId], references: [id], onDelete: SetNull)
   bottomItem   Item?    @relation("OutfitHistoryBottom", fields: [bottomItemId], references: [id], onDelete: SetNull)

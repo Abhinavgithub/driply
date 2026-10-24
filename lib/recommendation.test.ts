@@ -422,3 +422,101 @@ describe("day-window weather inputs", () => {
     expect(text).toContain("rain likely from 5pm");
   });
 });
+
+describe("occasion targets", () => {
+  const relaxedTop = makeItem({ id: "rt", subtype: "shirt", formality: "RELAXED" });
+  const elevatedTop = makeItem({
+    id: "et",
+    subtype: "shirt",
+    formality: "ELEVATED",
+    styleProfile: "SMART_CASUAL",
+  });
+  const relaxedBottom = makeItem({
+    id: "rb",
+    kind: "BOTTOM",
+    subtype: "jeans",
+    formality: "RELAXED",
+  });
+  const elevatedBottom = makeItem({
+    id: "eb",
+    kind: "BOTTOM",
+    subtype: "jeans",
+    formality: "ELEVATED",
+    styleProfile: "SMART_CASUAL",
+  });
+  const relaxedShoe = makeItem({
+    id: "rs",
+    kind: "SHOE",
+    subtype: "sneakers",
+    formality: "RELAXED",
+  });
+  const elevatedShoe = makeItem({
+    id: "es",
+    kind: "SHOE",
+    subtype: "sneakers",
+    formality: "ELEVATED",
+    styleProfile: "SMART_CASUAL",
+  });
+
+  function best(occasion?: "casual" | "work" | "going_out" | "active") {
+    return rankOutfits({
+      dateKey: DATE,
+      temperatureC: 20,
+      precipitationMm: 0,
+      tops: [relaxedTop, elevatedTop],
+      bottoms: [relaxedBottom, elevatedBottom],
+      shoes: [relaxedShoe, elevatedShoe],
+      wornItemIds: new Set(),
+      offset: 0,
+      limit: 1,
+      occasion,
+    })[0];
+  }
+
+  it("ranks an all-elevated outfit first for Work", () => {
+    const pick = best("work");
+    expect([pick.top.id, pick.bottom.id, pick.shoe.id]).toEqual(["et", "eb", "es"]);
+  });
+
+  it("ranks an all-relaxed outfit first for Casual", () => {
+    const pick = best("casual");
+    expect([pick.top.id, pick.bottom.id, pick.shoe.id]).toEqual(["rt", "rb", "rs"]);
+  });
+
+  it("scores an all-relaxed outfit lower on formality for Work than with no occasion", () => {
+    const relaxedOnly = (occasion?: "work") =>
+      rankOutfits({
+        dateKey: DATE,
+        temperatureC: 20,
+        precipitationMm: 0,
+        tops: [relaxedTop],
+        bottoms: [relaxedBottom],
+        shoes: [relaxedShoe],
+        wornItemIds: new Set(),
+        offset: 0,
+        limit: 1,
+        occasion,
+      })[0].debugScores.formalityAlignmentScore;
+    expect(relaxedOnly()).toBe(1);
+    expect(relaxedOnly("work")).toBe(0.5);
+  });
+
+  it("penalises athleisure for Work and rewards it for Active", () => {
+    const sporty = makeItem({ id: "at", styleProfile: "ATHLEISURE", subtype: "tshirt" });
+    const score = (occasion: "work" | "active") =>
+      rankOutfits({
+        dateKey: DATE,
+        temperatureC: 20,
+        precipitationMm: 0,
+        tops: [sporty],
+        bottoms: [relaxedBottom],
+        shoes: [relaxedShoe],
+        wornItemIds: new Set(),
+        offset: 0,
+        limit: 1,
+        occasion,
+      })[0].debugScores.occasionScore;
+    expect(score("work")).toBeLessThan(0);
+    expect(score("active")).toBeGreaterThan(0);
+  });
+});

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { fetchDayWeather } from "@/lib/openMeteo";
 import { formatOutfitExplanation, rankOutfits } from "@/lib/recommendation";
 import { parseStylePreferences } from "@/lib/style-preferences";
+import { OCCASIONS, parseOccasionByWeekday, resolveOccasion } from "@/lib/occasion";
 import { getServerDateKey, dateKeyToUtcStart } from "@/lib/date-utils";
 
 const QuerySchema = z.object({
@@ -19,6 +20,7 @@ const QuerySchema = z.object({
     .optional(),
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(12).default(6),
+  occasion: z.enum(OCCASIONS).optional(),
 });
 
 export const GET = withAuth(
@@ -30,16 +32,20 @@ export const GET = withAuth(
       date: searchParams.get("date") ?? undefined,
       offset: searchParams.get("offset"),
       limit: searchParams.get("limit"),
+      occasion: searchParams.get("occasion") ?? undefined,
     });
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: "Invalid query params. Expected lat, lon, optional date=YYYY-MM-DD." },
+        {
+          error:
+            "Invalid query params. Expected lat, lon, optional date=YYYY-MM-DD and occasion=casual|work|going_out|active.",
+        },
         { status: 400 },
       );
     }
 
-    const { lat, lon, date, offset, limit } = parsed.data;
+    const { lat, lon, date, offset, limit, occasion: requestedOccasion } = parsed.data;
     const dateKey = date ?? getServerDateKey();
     if (!date) {
       console.warn(
@@ -47,6 +53,12 @@ export const GET = withAuth(
       );
     }
     const stylePreferences = parseStylePreferences(currentUser.appUser.stylePreferences);
+    const { occasion, source: occasionSource } = resolveOccasion({
+      requested: requestedOccasion,
+      byWeekday: parseOccasionByWeekday(currentUser.appUser.occasionByWeekday),
+      dateKey,
+      stylePreferences,
+    });
 
     const todayStart = dateKeyToUtcStart(dateKey);
     const cutoff = new Date(todayStart);
@@ -131,6 +143,7 @@ export const GET = withAuth(
       limit: offset === 0 ? Math.max(limit, 6) : offset + limit,
       stylePreferences,
       isRainDay,
+      occasion,
     });
 
     const decision =
@@ -139,6 +152,8 @@ export const GET = withAuth(
             temperatureC,
             precipitationMm,
             day: weather,
+            occasion,
+            stylePreferences,
             rankedOptions: baseRankedOptions,
           })
         : {
@@ -194,6 +209,8 @@ export const GET = withAuth(
     return NextResponse.json({
       dateKey,
       weather,
+      occasion,
+      occasionSource,
       options,
       offset,
       limit,

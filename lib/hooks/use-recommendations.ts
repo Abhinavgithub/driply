@@ -16,6 +16,7 @@ import {
   type LocationSource,
   type SavedLocation,
 } from "@/lib/saved-location";
+import type { Occasion } from "@/lib/occasion";
 import type {
   DayWeather,
   RecommendationNeeds,
@@ -27,11 +28,18 @@ const PAGE_LIMIT = 6;
 
 function fetchRecommendationPage(
   apiFetch: ApiFetch,
-  args: { coords: Coordinates; dateKey: string; offset: number; limit: number },
+  args: {
+    coords: Coordinates;
+    dateKey: string;
+    offset: number;
+    limit: number;
+    occasion: Occasion | null;
+  },
 ) {
-  const { coords, dateKey, offset, limit } = args;
+  const { coords, dateKey, offset, limit, occasion } = args;
+  const occasionParam = occasion ? `&occasion=${occasion}` : "";
   return apiFetch<RecommendationOptionsResponse>(
-    `/api/recommendations?lat=${coords.lat}&lon=${coords.lon}&date=${encodeURIComponent(dateKey)}&offset=${offset}&limit=${limit}`,
+    `/api/recommendations?lat=${coords.lat}&lon=${coords.lon}&date=${encodeURIComponent(dateKey)}&offset=${offset}&limit=${limit}${occasionParam}`,
   );
 }
 
@@ -41,8 +49,16 @@ function fetchRecommendationPage(
  * selected option. `savedLocationKey` is per-user; pass null until auth
  * resolves.
  */
-export function useRecommendations(args: { savedLocationKey: string | null; dateKey: string }) {
-  const { savedLocationKey, dateKey } = args;
+/**
+ * `occasion` is the chip the user tapped for this day, or null to let the
+ * server resolve it (remembered weekday pick → quiz dress code → casual).
+ */
+export function useRecommendations(args: {
+  savedLocationKey: string | null;
+  dateKey: string;
+  occasion: Occasion | null;
+}) {
+  const { savedLocationKey, dateKey, occasion } = args;
   const apiFetch = useApiFetch();
   const takePendingGeolocation = useEagerGeolocation();
 
@@ -58,6 +74,8 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
   const [activeLocationLabel, setActiveLocationLabel] = useState<string | null>(null);
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null);
   const [weather, setWeather] = useState<DayWeather | null>(null);
+  // Occasion the server scored the current options for (resolved when `occasion` is null).
+  const [resolvedOccasion, setResolvedOccasion] = useState<Occasion | null>(null);
   // Last location that loaded successfully: switching Today/Tomorrow reuses
   // it instead of asking the browser for the device position again.
   const lastLocationRef = useRef<{
@@ -78,6 +96,7 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
           dateKey,
           offset: 0,
           limit: PAGE_LIMIT,
+          occasion,
         });
       } catch (err) {
         // The API reports an empty wardrobe via `needs` on the error body.
@@ -90,9 +109,10 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
       setOptions(data.options ?? []);
       setCursor(data.offset + (data.options?.length ?? 0));
       setWeather(data.weather ?? null);
+      setResolvedOccasion(data.occasion ?? null);
       lastLocationRef.current = { coords: nextCoords, source, label: locationLabel };
     },
-    [apiFetch, dateKey],
+    [apiFetch, dateKey, occasion],
   );
 
   /**
@@ -107,6 +127,7 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
       setNeeds(null);
       setOptions([]);
       setWeather(null);
+      setResolvedOccasion(null);
       setSelectedIndex(0);
       setCursor(0);
       const storedLocation = getSavedLocation(savedLocationKey);
@@ -210,6 +231,8 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
         dateKey,
         offset: cursor,
         limit: PAGE_LIMIT,
+        // Later pages must be scored for the same occasion as the first.
+        occasion: occasion ?? resolvedOccasion,
       });
       if (!data.options?.length) return;
       setOptions((prev) => [...prev, ...data.options]);
@@ -221,7 +244,17 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
     } finally {
       setLoading(false);
     }
-  }, [apiFetch, coords, cursor, dateKey, loading, options.length, selectedIndex]);
+  }, [
+    apiFetch,
+    coords,
+    cursor,
+    dateKey,
+    loading,
+    occasion,
+    options.length,
+    resolvedOccasion,
+    selectedIndex,
+  ]);
 
   return {
     options,
@@ -232,6 +265,7 @@ export function useRecommendations(args: { savedLocationKey: string | null; date
     locationError,
     needs,
     weather,
+    resolvedOccasion,
     locationSource,
     activeLocationLabel,
     savedLocation,
