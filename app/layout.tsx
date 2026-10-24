@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+// Self-hosted (variable, latin subset from @fontsource-variable/plus-jakarta-sans,
+// OFL-1.1) so builds never fetch from Google Fonts: that fetch intermittently
+// failed CI and could fail a deploy.
+const jakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin-wght-normal.woff2",
+  weight: "200 800",
+  style: "normal",
+  display: "swap",
   variable: "--font-jakarta",
 });
 
