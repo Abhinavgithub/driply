@@ -17,6 +17,8 @@
   --accent-strong: #8a3622;
   --accent-foreground: #ffffff;
   --accent-soft: #f6e3d3;
+  /* Terracotta lifted for text on ink surfaces (6.6:1 on --ink). */
+  --accent-on-ink: #e8957a;
   --info: #2f5d8a;
   --info-soft: #dce7f2;
   --success: #2f6e4c;
@@ -3579,7 +3581,7 @@ textarea {
 }
 
 .sdna-icon {
-  color: var(--accent);
+  color: var(--accent-on-ink);
   opacity: 0.9;
 }
 
@@ -3721,7 +3723,7 @@ textarea {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 3px;
-  color: var(--accent);
+  color: var(--accent-on-ink);
   text-transform: uppercase;
   margin-bottom: 10px;
 }
