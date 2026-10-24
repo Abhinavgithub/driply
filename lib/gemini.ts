@@ -23,7 +23,7 @@ import {
 const DEFAULT_CLASSIFIER_MODEL = "gemini-2.5-flash-lite";
 const DEFAULT_RECOMMENDER_MODEL = "gemini-2.5-flash-lite";
 const CLASSIFIER_PROMPT_VERSION = "wardrobe-classifier-v1";
-const RECOMMENDER_PROMPT_VERSION = "outfit-reranker-v1";
+const RECOMMENDER_PROMPT_VERSION = "outfit-reranker-v2";
 const CLASSIFIER_TIMEOUT_MS = 8000;
 const RECOMMENDER_TIMEOUT_MS = 4500;
 const MAX_IMAGE_DIMENSION = 384;
@@ -490,6 +490,11 @@ export async function rerankOutfitCandidates(args: {
       isRainDay: boolean;
     };
   };
+  /** What the day is for (occasion chip on /today) and its formality target. */
+  occasion?: {
+    occasion: string;
+    targetFormality: string;
+  };
   candidates: RerankCandidate[];
 }) {
   const model = await getRecommenderModel();
@@ -529,7 +534,7 @@ export async function rerankOutfitCandidates(args: {
             text:
               "Choose the best outfit candidate for the day. " +
               "Weather covers the whole day window: dress for the coldest hour and any rain, not just the current reading. " +
-              "Priority order: weather fit first, then cohesive style/color/formality, then avoid recently worn pieces. " +
+              "Priority order: weather fit first, then fit for the day's occasion (match its target formality), then cohesive style/color/formality, then avoid recently worn pieces. " +
               "Write the reason in a fun, confident Gen-Z tone — casual, punchy, 1 sentence, no cringe. Think how a stylish friend texts, not a fashion magazine. No hashtags. " +
               "Output ONLY valid JSON matching the schema \u2014 no markdown, no explanation, no extra text. " +
               "Return the full ordered list of all provided candidates. " +
@@ -548,6 +553,7 @@ export async function rerankOutfitCandidates(args: {
           {
             text: JSON.stringify({
               weather: args.weather,
+              occasion: args.occasion,
               candidates: args.candidates,
             }),
           },

@@ -152,6 +152,8 @@ export const GET = withAuth(
             temperatureC,
             precipitationMm,
             day: weather,
+            occasion,
+            stylePreferences,
             rankedOptions: baseRankedOptions,
           })
         : {

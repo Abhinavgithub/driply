@@ -6,12 +6,14 @@ import {
   isAiRecommenderEnabled,
   rerankOutfitCandidates,
 } from "@/lib/gemini";
+import { targetFormalityFor, type Occasion } from "@/lib/occasion";
 import type { DayWeather } from "@/lib/openMeteo";
 import {
   getRecommendationCandidateId,
   type ItemWithAttributes,
   type RecommendationResult,
 } from "@/lib/recommendation";
+import type { StylePreferences } from "@/lib/style-preferences";
 
 export type RecommendationDecisionSource = "ai" | "algorithm_fallback";
 
@@ -24,6 +26,14 @@ export type RecommendationDecision = {
 
 const SHORTLIST_LIMIT = 3;
 const MIN_AI_CONFIDENCE = 0.2;
+
+/** Names a target on the RELAXED(0)–ELEVATED(1)–DRESSY(2) scale for the prompt. */
+function formalityLabel(target: number) {
+  if (target <= 0) return "RELAXED";
+  if (target < 1.5) return "ELEVATED";
+  if (target < 2) return "between ELEVATED and DRESSY";
+  return "DRESSY";
+}
 
 function itemSummary(item: ItemWithAttributes) {
   return {
@@ -52,9 +62,12 @@ export async function applyAiRecommendationRerank(args: {
   temperatureC: number;
   precipitationMm: number;
   day?: DayWeather;
+  /** The day's occasion; passed through so the reranker doesn't undo the chip. */
+  occasion?: Occasion;
+  stylePreferences?: StylePreferences | null;
   rankedOptions: RecommendationResult[];
 }) {
-  const { temperatureC, precipitationMm, day, rankedOptions } = args;
+  const { temperatureC, precipitationMm, day, occasion, stylePreferences, rankedOptions } = args;
 
   if (!(await isAiRecommenderEnabled())) {
     console.info("[gemini:rerank] fallback", {
@@ -103,6 +116,12 @@ export async function applyAiRecommendationRerank(args: {
               }
             : undefined,
       },
+      occasion: occasion
+        ? {
+            occasion,
+            targetFormality: formalityLabel(targetFormalityFor(occasion, stylePreferences)),
+          }
+        : undefined,
       candidates: shortlist.map((option) => ({
         candidateId: getRecommendationCandidateId(option),
         weatherScore: option.debugScores.weatherScore,
